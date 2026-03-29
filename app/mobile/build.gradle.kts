@@ -6,30 +6,20 @@ plugins {
 }
 
 android {
-    namespace = "com.screening.dashboard"
+    namespace = "com.screening.mobile"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.screening.dashboard"
-        minSdk = 23
+        applicationId = "com.screening.mobile"
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = file(System.getenv("SCREENING_KEYSTORE") ?: "${System.getProperty("user.home")}/.screening-keystore.jks")
-            storePassword = System.getenv("SCREENING_STORE_PASSWORD") ?: "screening2026"
-            keyAlias = System.getenv("SCREENING_KEY_ALIAS") ?: "screening"
-            keyPassword = System.getenv("SCREENING_KEY_PASSWORD") ?: "screening2026"
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -46,14 +36,11 @@ android {
     buildFeatures {
         compose = true
     }
-
-    lint {
-        checkReleaseBuilds = false
-        abortOnError = false
-    }
 }
 
 dependencies {
+    implementation(project(":shared"))
+
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
@@ -61,20 +48,16 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
-    implementation(libs.tv.foundation)
-    implementation(libs.tv.material)
-
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.activity.compose)
 
-    implementation(project(":shared"))
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.media3.exoplayer)
-    implementation(libs.media3.ui)
     implementation(libs.media3.session)
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

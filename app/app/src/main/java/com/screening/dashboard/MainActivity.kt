@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import com.screening.dashboard.data.MusicService
 import com.screening.dashboard.ui.DashboardScreen
+import com.screening.dashboard.ui.SetupScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -19,33 +20,40 @@ class MainActivity : ComponentActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Allow intent extras to override (for ADB testing)
         intent.getStringExtra("server_host")?.let { host ->
             val port = intent.getIntExtra("server_port", 9900)
-            app.updateServerUrl(host, port)
+            app.saveAndConnect(host, port)
         }
 
         app.ensureConnected()
 
         setContent {
-            val state by app.repository.state.collectAsState()
+            val setupComplete by app.setupComplete.collectAsState()
 
-            // Start music when tracks arrive
-            LaunchedEffect(state.music) {
-                if (state.music.isNotEmpty()) {
-                    MusicService.start(
-                        this@MainActivity,
-                        app.serverBaseUrl,
-                        state.music
-                    )
+            if (!setupComplete) {
+                SetupScreen(
+                    defaultIp = app.savedHost,
+                    onConnect = { host, port -> app.saveAndConnect(host, port) },
+                    onScan = { app.retryScan() }
+                )
+            } else {
+                val state by app.repository.state.collectAsState()
+
+                LaunchedEffect(state.music) {
+                    if (state.music.isNotEmpty()) {
+                        MusicService.start(this@MainActivity, app.serverBaseUrl, state.music)
+                    }
                 }
-            }
 
-            DashboardScreen(
-                state = state.copy(serverBaseUrl = app.serverBaseUrl),
-                imageLoader = app.imageLoader,
-                onToggleTodo = { id -> app.repository.toggleTodo(id) },
-                onScreenShareStop = { app.repository.sendScreenShareStop() }
-            )
+                DashboardScreen(
+                    state = state.copy(serverBaseUrl = app.serverBaseUrl),
+                    imageLoader = app.imageLoader,
+                    onToggleTodo = { id -> app.repository.toggleTodo(id) },
+                    onScreenShareStop = { app.repository.screenShareStop() },
+                    onClearForceFrame = { app.repository.clearForceFrame() }
+                )
+            }
         }
     }
 }

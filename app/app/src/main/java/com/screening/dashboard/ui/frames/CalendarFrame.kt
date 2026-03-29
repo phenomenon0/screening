@@ -13,7 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
-import com.screening.dashboard.model.CalendarEvent
+import com.screening.shared.model.CalendarEvent
 import com.screening.dashboard.ui.theme.*
 import java.time.LocalDate
 import java.time.LocalDateTime

@@ -1,8 +1,8 @@
-package com.screening.dashboard.data
+package com.screening.shared.data
 
 import android.util.Log
-import com.screening.dashboard.model.ClientMessage
-import com.screening.dashboard.model.ServerMessage
+import com.screening.shared.model.ClientMessage
+import com.screening.shared.model.ServerMessage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +12,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.*
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 class WebSocketClient(private val serverUrl: String) {
 
@@ -32,12 +31,6 @@ class WebSocketClient(private val serverUrl: String) {
     private val _connected = MutableStateFlow(false)
     val connected: StateFlow<Boolean> = _connected
 
-    // Debug counters
-    val msgCount = AtomicInteger(0)
-    val parseErrors = AtomicInteger(0)
-    val _lastError = MutableStateFlow("")
-    val lastError: StateFlow<String> = _lastError
-
     fun connect() {
         if (running.compareAndSet(false, true)) {
             scope.launch { doConnect() }
@@ -46,7 +39,6 @@ class WebSocketClient(private val serverUrl: String) {
 
     private fun doConnect() {
         if (!running.get()) return
-
         val request = Request.Builder().url(serverUrl).build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -56,17 +48,10 @@ class WebSocketClient(private val serverUrl: String) {
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                msgCount.incrementAndGet()
                 try {
                     val msg = json.decodeFromString<ServerMessage>(text)
-                    val emitted = _messages.tryEmit(msg)
-                    if (!emitted) {
-                        _lastError.value = "emit failed for ${msg.type}"
-                    }
-                } catch (e: Exception) {
-                    parseErrors.incrementAndGet()
-                    _lastError.value = "parse: ${e.message?.take(100)}"
-                }
+                    _messages.tryEmit(msg)
+                } catch (_: Exception) {}
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -80,7 +65,6 @@ class WebSocketClient(private val serverUrl: String) {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 _connected.value = false
-                _lastError.value = "ws: ${t.message?.take(80)}"
                 scheduleReconnect()
             }
         })

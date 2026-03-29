@@ -20,17 +20,15 @@ type Hub struct {
 	videos   *VideoSource
 	music    *MusicSource
 	screen   *ScreenShare
+	pomodoro *Pomodoro
+	habits   *HabitStore
 }
 
-func NewHub(cal *CalendarSource, todos *TodoSource, imgs *ImageSource, vids *VideoSource, mus *MusicSource, scr *ScreenShare) *Hub {
+func NewHub(cal *CalendarSource, todos *TodoSource, imgs *ImageSource, vids *VideoSource, mus *MusicSource, scr *ScreenShare, pomo *Pomodoro, hab *HabitStore) *Hub {
 	return &Hub{
 		clients:  make(map[*websocket.Conn]context.CancelFunc),
-		calendar: cal,
-		todos:    todos,
-		images:   imgs,
-		videos:   vids,
-		music:    mus,
-		screen:   scr,
+		calendar: cal, todos: todos, images: imgs, videos: vids,
+		music: mus, screen: scr, pomodoro: pomo, habits: hab,
 	}
 }
 
@@ -50,14 +48,16 @@ func (h *Hub) Remove(conn *websocket.Conn) {
 }
 
 func (h *Hub) SendFullState(ctx context.Context, conn *websocket.Conn) error {
+	pomoState := h.pomodoro.State()
 	msgs := []ServerMessage{
 		{Type: "calendar_sync", Events: h.calendar.Events()},
 		{Type: "todo_sync", Items: h.todos.Items()},
 		{Type: "image_sync", Images: h.images.List()},
 		{Type: "video_sync", Videos: h.videos.List()},
 		{Type: "music_sync", Music: h.music.List()},
+		{Type: "habit_sync", Habits: h.habits.List()},
+		{Type: "pomodoro_sync", Pomodoro: &pomoState},
 	}
-	// If screen share is active, tell the new client
 	if h.screen.IsActive() {
 		msgs = append(msgs, ServerMessage{Type: "screen_share_active", URL: h.screen.streamURL()})
 	}
@@ -84,7 +84,6 @@ func (h *Hub) Broadcast(msg ServerMessage) {
 	for conn := range h.clients {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
-			log.Printf("broadcast write error: %v", err)
 			cancel()
 			go h.Remove(conn)
 			continue
@@ -98,6 +97,11 @@ func (h *Hub) BroadcastTodos()    { h.Broadcast(ServerMessage{Type: "todo_sync",
 func (h *Hub) BroadcastImages()   { h.Broadcast(ServerMessage{Type: "image_sync", Images: h.images.List()}) }
 func (h *Hub) BroadcastVideos()   { h.Broadcast(ServerMessage{Type: "video_sync", Videos: h.videos.List()}) }
 func (h *Hub) BroadcastMusic()    { h.Broadcast(ServerMessage{Type: "music_sync", Music: h.music.List()}) }
+func (h *Hub) BroadcastHabits()   { h.Broadcast(ServerMessage{Type: "habit_sync", Habits: h.habits.List()}) }
+func (h *Hub) BroadcastPomodoro() {
+	s := h.pomodoro.State()
+	h.Broadcast(ServerMessage{Type: "pomodoro_sync", Pomodoro: &s})
+}
 
 func (h *Hub) HandleScreenShare(start bool) {
 	if start {

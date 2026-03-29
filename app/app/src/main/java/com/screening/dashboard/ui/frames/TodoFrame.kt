@@ -13,7 +13,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
-import com.screening.dashboard.model.TodoItem
+import com.screening.shared.model.TodoItem
 import com.screening.dashboard.ui.theme.*
 
 @Composable

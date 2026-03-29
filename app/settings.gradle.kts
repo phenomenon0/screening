@@ -15,3 +15,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Screening"
 include(":app")
+include(":shared")
+include(":mobile")

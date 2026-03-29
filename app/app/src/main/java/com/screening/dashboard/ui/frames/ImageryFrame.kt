@@ -16,7 +16,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.size.Size
-import com.screening.dashboard.model.ImageInfo
+import com.screening.shared.model.ImageInfo
 import com.screening.dashboard.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlin.random.Random

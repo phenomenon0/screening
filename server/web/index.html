@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Screening</title>
+<style>
+:root {
+  --bg: #0D0D0D; --surface: #1A1A2E; --card: #16213E;
+  --cyan: #00D2FF; --green: #00E676; --red: #FF5252; --amber: #FFab40;
+  --text: #E8E8E8; --text2: #A0A0A0; --dim: #606060;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+h1 { font-size: 28px; margin-bottom: 4px; }
+.subtitle { color: var(--cyan); font-size: 14px; margin-bottom: 24px; }
+.status { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; font-size: 13px; color: var(--text2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.on { background: var(--green); } .dot.off { background: var(--red); }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--card); padding-bottom: 8px; overflow-x: auto; }
+.tab { padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer; color: var(--text2); font-size: 14px; white-space: nowrap; user-select: none; -webkit-tap-highlight-color: transparent; }
+.tab.active { background: var(--card); color: var(--cyan); }
+.panel { display: none; } .panel.active { display: block; }
+
+.input-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.input-row input { flex: 1; padding: 10px 14px; background: var(--surface); border: 1px solid var(--card); border-radius: 8px; color: var(--text); font-size: 15px; outline: none; }
+.input-row input:focus { border-color: var(--cyan); }
+.input-row select { padding: 10px; background: var(--surface); border: 1px solid var(--card); border-radius: 8px; color: var(--text); }
+.btn { padding: 10px 18px; background: var(--cyan); color: var(--bg); border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.btn.danger { background: var(--red); }
+.btn.muted { background: var(--card); color: var(--text); }
+.del { cursor: pointer; color: var(--red); font-size: 16px; padding: 4px 8px; }
+
+/* Todo */
+.todo-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--card); border-radius: 8px; margin-bottom: 8px; }
+.todo-item.done { opacity: 0.5; }
+.todo-item .check { cursor: pointer; font-size: 18px; }
+.todo-item .text { flex: 1; font-size: 15px; }
+.priority { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+.p1 { background: var(--red); color: white; } .p2 { background: var(--amber); color: var(--bg); } .p3 { background: var(--green); color: var(--bg); }
+
+/* Media */
+.dropzone { border: 2px dashed var(--card); border-radius: 12px; padding: 40px; text-align: center; color: var(--text2); cursor: pointer; transition: border-color 0.2s; margin-bottom: 16px; }
+.dropzone.over { border-color: var(--cyan); background: rgba(0,210,255,0.05); }
+.dropzone input { display: none; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.file-thumb { background: var(--card); border-radius: 8px; overflow: hidden; }
+.file-thumb img { width: 100%; height: 80px; object-fit: cover; display: block; }
+.file-thumb .name { padding: 4px 6px; font-size: 11px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Pomodoro */
+.pomo { text-align: center; padding: 40px 0; }
+.pomo .time { font-size: 96px; font-weight: 200; letter-spacing: -4px; font-variant-numeric: tabular-nums; }
+.pomo .label { color: var(--text2); margin-top: 8px; font-size: 16px; }
+.pomo .controls { display: flex; gap: 12px; justify-content: center; margin-top: 24px; }
+.pomo .presets { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+.pomo .ring { width: 240px; height: 240px; border-radius: 50%; border: 4px solid var(--card); position: relative; margin: 0 auto 24px; display: flex; align-items: center; justify-content: center; }
+.pomo .ring-progress { position: absolute; inset: -4px; border-radius: 50%; border: 4px solid transparent; border-top-color: var(--cyan); transform: rotate(0deg); transition: transform 1s linear; }
+
+/* Habits */
+.habit-card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.habit-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.habit-streak { font-size: 28px; font-weight: bold; min-width: 60px; text-align: center; }
+.habit-meta { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.heatmap { display: flex; gap: 2px; margin-top: 8px; flex-wrap: wrap; }
+.heat-cell { width: 12px; height: 12px; border-radius: 2px; background: #1a1a1a; }
+.heat-cell.done { background: var(--green); }
+.heat-cell.today { border: 1px solid var(--cyan); }
+
+/* Remote */
+.remote { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 0; }
+.frame-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+@media (max-width: 600px) {
+  .container { padding: 12px; }
+  h1 { font-size: 22px; }
+  .pomo .time { font-size: 64px; }
+  .pomo .ring { width: 180px; height: 180px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Screening</h1>
+  <p class="subtitle">Dashboard Control</p>
+  <div class="status"><div class="dot" id="statusDot"></div><span id="statusText">Connecting...</span></div>
+
+  <div class="tabs" id="tabBar"></div>
+  <div id="panels"></div>
+</div>
+
+<script>
+let ws, state = { todos: [], images: [], videos: [], music: [], habits: [], pomodoro: null };
+const baseUrl = location.origin;
+
+const tabs = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'media', label: 'Media' },
+  { id: 'pomodoro', label: 'Pomodoro' },
+  { id: 'habits', label: 'Habits' },
+  { id: 'remote', label: 'Remote' },
+];
+
+// Build tabs
+const tabBar = document.getElementById('tabBar');
+const panels = document.getElementById('panels');
+tabs.forEach((t, i) => {
+  const tab = document.createElement('div');
+  tab.className = 'tab' + (i === 0 ? ' active' : '');
+  tab.textContent = t.label;
+  tab.dataset.panel = t.id;
+  tab.onclick = () => switchTab(t.id);
+  tabBar.appendChild(tab);
+
+  const panel = document.createElement('div');
+  panel.id = t.id;
+  panel.className = 'panel' + (i === 0 ? ' active' : '');
+  panels.appendChild(panel);
+});
+
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.panel === id));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
+  if (id === 'media') renderMedia();
+}
+
+// WebSocket
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => setStatus(true);
+  ws.onclose = () => { setStatus(false); setTimeout(connect, 2000); };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    switch(msg.type) {
+      case 'todo_sync': state.todos = msg.items || []; renderTodos(); break;
+      case 'image_sync': state.images = msg.images || []; if (isActive('media')) renderMedia(); break;
+      case 'video_sync': state.videos = msg.videos || []; break;
+      case 'music_sync': state.music = msg.music || []; break;
+      case 'habit_sync': state.habits = msg.habits || []; renderHabits(); break;
+      case 'pomodoro_sync': state.pomodoro = msg.pomodoro; renderPomodoro(); break;
+      case 'ping': ws.send(JSON.stringify({type:'pong'})); break;
+    }
+  };
+}
+
+function isActive(id) { return document.getElementById(id)?.classList.contains('active'); }
+function setStatus(on) {
+  document.getElementById('statusDot').className = 'dot ' + (on ? 'on' : 'off');
+  document.getElementById('statusText').textContent = on ? 'Connected' : 'Reconnecting...';
+}
+function send(type, data) { ws?.send(JSON.stringify({type, ...data})); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── TODOS ──
+function renderTodos() {
+  const sorted = [...state.todos].sort((a,b) => a.done - b.done || a.priority - b.priority);
+  document.getElementById('todos').innerHTML = `
+    <div class="input-row">
+      <input id="todoText" placeholder="Add a task..." onkeydown="if(event.key==='Enter')addTodo()">
+      <select id="todoPri"><option value="1">P1</option><option value="2" selected>P2</option><option value="3">P3</option></select>
+      <button class="btn" onclick="addTodo()">Add</button>
+    </div>
+    ${sorted.map(t => `
+      <div class="todo-item ${t.done ? 'done' : ''}">
+        <span class="check" onclick="send('todo_toggle',{id:'${t.id}'})">${t.done ? '✓' : '○'}</span>
+        <span class="text" style="${t.done ? 'text-decoration:line-through' : ''}">${esc(t.text)}</span>
+        <span class="priority p${t.priority}">P${t.priority}</span>
+        <span class="del" onclick="send('todo_delete',{id:'${t.id}'})">✕</span>
+      </div>`).join('')}`;
+}
+function addTodo() {
+  const text = document.getElementById('todoText').value.trim();
+  if (!text) return;
+  send('todo_add', {text, priority: parseInt(document.getElementById('todoPri').value)});
+  document.getElementById('todoText').value = '';
+}
+
+// ── MEDIA ──
+function renderMedia() {
+  document.getElementById('media').innerHTML = `
+    <div class="dropzone" id="dz" onclick="document.getElementById('fileIn').click()">
+      <input type="file" id="fileIn" multiple accept="image/*,video/*,audio/*" onchange="uploadFiles(this.files)">
+      <p>Drop files here or tap to browse</p>
+      <p style="font-size:12px;margin-top:8px">Images · Videos · Music</p>
+    </div>
+    <div id="uploadMsg"></div>
+    <h3 style="margin:16px 0 8px;color:var(--text2)">Images (${state.images.length})</h3>
+    <div class="file-grid">${state.images.map(i => `
+      <div class="file-thumb"><img src="${baseUrl}${i.url}" loading="lazy"><div class="name">${esc(i.filename)}</div></div>`).join('')}
+    </div>
+    ${state.videos.length ? `<h3 style="margin:16px 0 8px;color:var(--text2)">Videos (${state.videos.length})</h3>
+    <div class="file-grid">${state.videos.map(v => `
+      <div class="file-thumb" style="padding:12px;text-align:center"><div style="font-size:24px">🎬</div><div class="name">${esc(v.filename)}</div></div>`).join('')}
+    </div>` : ''}
+    ${state.music.length ? `<h3 style="margin:16px 0 8px;color:var(--text2)">Music (${state.music.length})</h3>
+    <div class="file-grid">${state.music.map(m => `
+      <div class="file-thumb" style="padding:12px;text-align:center"><div style="font-size:24px">🎵</div><div class="name">${esc(m.filename)}</div></div>`).join('')}
+    </div>` : ''}`;
+
+  // Re-attach drag handlers
+  const dz = document.getElementById('dz');
+  if (dz) {
+    ['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('over'); }));
+    ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('over'); }));
+    dz.addEventListener('drop', e => uploadFiles(e.dataTransfer.files));
+  }
+}
+async function uploadFiles(files) {
+  const msg = document.getElementById('uploadMsg');
+  for (const f of files) {
+    msg.innerHTML = `<p style="color:var(--cyan)">Uploading ${esc(f.name)}...</p>`;
+    const fd = new FormData(); fd.append('file', f);
+    try {
+      const r = await fetch('/upload', {method:'POST', body:fd});
+      msg.innerHTML = r.ok ? `<p style="color:var(--green)">✓ ${esc(f.name)}</p>` : `<p style="color:var(--red)">✗ Failed</p>`;
+    } catch(e) { msg.innerHTML = `<p style="color:var(--red)">✗ Error</p>`; }
+  }
+}
+
+// ── POMODORO ──
+function renderPomodoro() {
+  const p = state.pomodoro || {remaining: 1500, duration: 1500, running: false};
+  const mins = Math.floor(p.remaining / 60);
+  const secs = p.remaining % 60;
+  const pct = p.duration > 0 ? (p.remaining / p.duration) : 1;
+  const deg = (1 - pct) * 360;
+  const color = p.remaining === 0 ? 'var(--green)' : p.remaining < 60 ? 'var(--red)' : p.running ? 'var(--cyan)' : 'var(--text)';
+  const label = p.running ? 'Focus...' : p.remaining === 0 ? 'Done! 🎉' : 'Ready';
+
+  document.getElementById('pomodoro').innerHTML = `
+    <div class="pomo">
+      <div class="ring">
+        <div class="ring-progress" style="transform:rotate(${deg}deg);border-top-color:${color}"></div>
+        <div>
+          <div class="time" style="color:${color}">${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}</div>
+          <div class="label">${label}</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="send('pomodoro_start')">${p.running ? '▶ Running' : '▶ Start'}</button>
+        <button class="btn muted" onclick="send('pomodoro_pause')">⏸ Pause</button>
+        <button class="btn danger" onclick="send('pomodoro_reset')">↺ Reset</button>
+      </div>
+      <div class="presets">
+        <button class="btn muted" onclick="send('pomodoro_set',{minutes:25})">25m</button>
+        <button class="btn muted" onclick="send('pomodoro_set',{minutes:15})">15m</button>
+        <button class="btn muted" onclick="send('pomodoro_set',{minutes:5})">5m</button>
+        <button class="btn muted" onclick="send('pomodoro_set',{minutes:50})">50m</button>
+      </div>
+    </div>`;
+}
+
+// ── HABITS ──
+function renderHabits() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('habits').innerHTML = `
+    <div class="input-row">
+      <input id="habitName" placeholder="New habit..." onkeydown="if(event.key==='Enter')addHabit()">
+      <button class="btn" onclick="addHabit()">Add</button>
+    </div>
+    ${state.habits.map(h => {
+      const streakColor = h.streak >= 30 ? 'var(--cyan)' : h.streak >= 7 ? 'var(--green)' : h.streak > 0 ? 'var(--amber)' : 'var(--dim)';
+      const history = new Set(h.history || []);
+      // Build 8-week heatmap
+      const cells = [];
+      for (let i = 55; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const ds = d.toISOString().slice(0, 10);
+        const done = history.has(ds) || (ds === today && h.done_today);
+        const isToday = ds === today;
+        cells.push(`<div class="heat-cell${done ? ' done' : ''}${isToday ? ' today' : ''}" title="${ds}"></div>`);
+      }
+      return `
+        <div class="habit-card">
+          <div class="habit-header">
+            <div class="habit-streak" style="color:${streakColor}">${h.streak > 0 ? '🔥' : ''} ${h.streak}</div>
+            <div style="flex:1">
+              <div style="font-size:16px;font-weight:500">${esc(h.name)}</div>
+              <div class="habit-meta">${h.total_done || 0} total · best streak: ${h.best_streak || 0}</div>
+            </div>
+            <button class="btn ${h.done_today ? 'danger' : ''}" onclick="send('habit_toggle',{id:'${h.id}'})">${h.done_today ? 'Undo' : '✓ Done'}</button>
+            <span class="del" onclick="if(confirm('Delete habit?'))send('habit_delete',{id:'${h.id}'})">✕</span>
+          </div>
+          <div class="heatmap">${cells.join('')}</div>
+        </div>`;
+    }).join('')}`;
+}
+function addHabit() {
+  const name = document.getElementById('habitName').value.trim();
+  if (!name) return;
+  send('habit_add', {name});
+  document.getElementById('habitName').value = '';
+}
+
+// ── REMOTE ──
+document.getElementById('remote').innerHTML = `
+  <div class="remote">
+    <p style="color:var(--text2)">Switch TV Frame</p>
+    <div class="frame-btns">
+      <button class="btn muted" onclick="send('frame_change',{frame:0})">📷 Images</button>
+      <button class="btn muted" onclick="send('frame_change',{frame:1})">✅ Todos</button>
+      <button class="btn muted" onclick="send('frame_change',{frame:2})">🔥 Habits</button>
+      <button class="btn muted" onclick="send('frame_change',{frame:3})">📅 Calendar</button>
+      <button class="btn muted" onclick="send('frame_change',{frame:4})">🎬 Video</button>
+    </div>
+    <div style="margin-top:32px">
+      <p style="color:var(--text2);margin-bottom:8px">Screen Share</p>
+      <button class="btn" onclick="send('screen_share_start')">📺 Share Screen</button>
+      <button class="btn danger" onclick="send('screen_share_stop')" style="margin-left:8px">Stop</button>
+      <p style="font-size:11px;color:var(--dim);margin-top:8px">Requires wl-screenrec (Wayland) or X11</p>
+    </div>
+  </div>`;
+
+// Init
+renderTodos(); renderMedia(); renderPomodoro(); renderHabits();
+connect();
+</script>
+</body>
+</html>

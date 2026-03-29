@@ -22,7 +22,7 @@ class MusicService : MediaSessionService() {
         private const val CHANNEL_ID = "screening_music"
         private const val NOTIFICATION_ID = 1
 
-        fun start(context: Context, baseUrl: String, tracks: List<com.screening.dashboard.model.MusicTrack>) {
+        fun start(context: Context, baseUrl: String, tracks: List<com.screening.shared.model.MusicTrack>) {
             val intent = Intent(context, MusicService::class.java).apply {
                 putExtra("base_url", baseUrl)
                 putStringArrayListExtra("urls", ArrayList(tracks.map { "$baseUrl${it.url}" }))

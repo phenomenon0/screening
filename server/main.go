@@ -67,14 +67,18 @@ func main() {
 	localIP := getLocalIP()
 	var hub *Hub
 
+	dataDir := filepath.Dir(cfg.TodosFile) // ~/.local/share/screening/
+
 	calendar := NewCalendarSource(cfg.ICSPath, func() { hub.BroadcastCalendar() })
 	todos := NewTodoSource(cfg.TodosFile, func() { hub.BroadcastTodos() })
 	images := NewImageSource(cfg.ImagesDir, func() { hub.BroadcastImages() })
 	videos := NewVideoSource(cfg.VideosDir, func() { hub.BroadcastVideos() })
 	music := NewMusicSource(cfg.MusicDir, func() { hub.BroadcastMusic() })
 	screen := NewScreenShare(localIP)
+	pomodoro := NewPomodoro(func() { hub.BroadcastPomodoro() })
+	habits := NewHabitStore(dataDir, func() { hub.BroadcastHabits() })
 
-	hub = NewHub(calendar, todos, images, videos, music, screen)
+	hub = NewHub(calendar, todos, images, videos, music, screen, pomodoro, habits)
 
 	go calendar.Watch(done)
 	go todos.Watch(done)
@@ -85,10 +89,13 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/qr.png", handleQRCode(localIP, cfg.Port))
 	mux.HandleFunc("/ws", handleWebSocket(hub))
+	mux.HandleFunc("/upload", handleUpload(cfg.ImagesDir, cfg.VideosDir, cfg.MusicDir))
 	mux.HandleFunc("/images/", handleFileServe(cfg.ImagesDir))
 	mux.HandleFunc("/videos/", handleFileServe(cfg.VideosDir))
 	mux.HandleFunc("/music/", handleFileServe(cfg.MusicDir))
+	mux.Handle("/", handleWebUI())
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	server := &http.Server{Addr: addr, Handler: mux}

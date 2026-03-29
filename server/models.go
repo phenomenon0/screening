@@ -10,7 +10,10 @@ type ServerMessage struct {
 	Images []ImageInfo  `json:"images,omitempty"`
 	Videos []VideoInfo  `json:"videos,omitempty"`
 	Music  []MusicTrack `json:"music,omitempty"`
-	URL    string       `json:"url,omitempty"` // for screen_share_active
+	URL      string        `json:"url,omitempty"`      // for screen_share_active
+	Habits   []Habit       `json:"habits,omitempty"`
+	Pomodoro *PomodoroState `json:"pomodoro,omitempty"`
+	Frame    int           `json:"frame,omitempty"`   // for frame_change
 }
 
 type Event struct {
@@ -36,8 +39,13 @@ type ImageInfo struct {
 }
 
 type ClientMessage struct {
-	Type string `json:"type"`
-	ID   string `json:"id,omitempty"`
+	Type     string `json:"type"`
+	ID       string `json:"id,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Priority int    `json:"priority,omitempty"`
+	Minutes  int    `json:"minutes,omitempty"`
+	Frame    int    `json:"frame,omitempty"`
 }
 
 type VideoInfo struct {

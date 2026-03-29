@@ -1,4 +1,4 @@
-package com.screening.dashboard.data
+package com.screening.shared.data
 
 import android.content.Context
 import android.net.nsd.NsdManager
@@ -19,39 +19,25 @@ class ServerDiscovery(context: Context) {
     private var discovering = false
 
     private val discoveryListener = object : NsdManager.DiscoveryListener {
-        override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-            Log.e(TAG, "Discovery start failed: $errorCode")
-        }
+        override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {}
         override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
-        override fun onDiscoveryStarted(serviceType: String) {
-            Log.d(TAG, "Discovery started for $serviceType")
-        }
+        override fun onDiscoveryStarted(serviceType: String) {}
         override fun onDiscoveryStopped(serviceType: String) {}
 
         override fun onServiceFound(service: NsdServiceInfo) {
-            Log.d(TAG, "Found service: ${service.serviceName}")
             if (service.serviceName == "Screening") {
                 nsdManager.resolveService(service, resolveListener)
             }
         }
-
-        override fun onServiceLost(service: NsdServiceInfo) {
-            Log.d(TAG, "Lost service: ${service.serviceName}")
-        }
+        override fun onServiceLost(service: NsdServiceInfo) {}
     }
 
     private val resolveListener = object : NsdManager.ResolveListener {
-        override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-            Log.e(TAG, "Resolve failed: $errorCode")
-        }
-
+        override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {}
         override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
             val host = serviceInfo.host.hostAddress
             val port = serviceInfo.port
-            Log.d(TAG, "Resolved: $host:$port")
-            if (host != null) {
-                _serverAddress.value = Pair(host, port)
-            }
+            if (host != null) _serverAddress.value = Pair(host, port)
         }
     }
 
@@ -64,8 +50,6 @@ class ServerDiscovery(context: Context) {
     fun stopDiscovery() {
         if (!discovering) return
         discovering = false
-        try {
-            nsdManager.stopServiceDiscovery(discoveryListener)
-        } catch (_: Exception) {}
+        try { nsdManager.stopServiceDiscovery(discoveryListener) } catch (_: Exception) {}
     }
 }

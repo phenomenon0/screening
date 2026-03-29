@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -73,6 +75,36 @@ func (ts *TodoSource) save() {
 	if err := os.WriteFile(ts.path, data, 0644); err != nil {
 		log.Printf("todos: write %s: %v", ts.path, err)
 	}
+}
+
+// Add creates a new todo item.
+func (ts *TodoSource) Add(text string, priority int) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if priority < 1 || priority > 3 {
+		priority = 2
+	}
+	ts.items = append(ts.items, TodoItem{
+		ID:       fmt.Sprintf("t%d", time.Now().UnixMilli()),
+		Text:     text,
+		Done:     false,
+		Priority: priority,
+	})
+	ts.save()
+}
+
+// Delete removes a todo by ID.
+func (ts *TodoSource) Delete(id string) bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	for i := range ts.items {
+		if ts.items[i].ID == id {
+			ts.items = append(ts.items[:i], ts.items[i+1:]...)
+			ts.save()
+			return true
+		}
+	}
+	return false
 }
 
 // Toggle flips the done state of a todo by ID and persists.
