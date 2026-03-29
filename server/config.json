@@ -1,0 +1,8 @@
+{
+  "port": 9900,
+  "ics_path": "",
+  "images_dir": "~/Pictures/Dashboard",
+  "videos_dir": "~/Videos/Dashboard",
+  "music_dir": "~/Music/Dashboard",
+  "todos_file": "~/.local/share/screening/todos.json"
+}

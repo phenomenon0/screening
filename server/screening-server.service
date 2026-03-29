@@ -1,0 +1,13 @@
+[Unit]
+Description=Screening Dashboard Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/screening-server -config %h/.config/screening/config.json
+WorkingDirectory=%h
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

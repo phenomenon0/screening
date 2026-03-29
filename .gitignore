@@ -1,0 +1,26 @@
+# Android
+app/app/build/
+app/build/
+app/.gradle/
+app/local.properties
+*.apk
+*.aab
+
+# Keystore (NEVER commit)
+*.jks
+*.keystore
+
+# Go
+server/server
+server/dist/
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gradle
+.gradle/

@@ -1,0 +1,16 @@
+module github.com/phenomenon0/screening/server
+
+go 1.25.5
+
+require (
+	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608 // indirect
+	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/grandcat/zeroconf v1.0.0 // indirect
+	github.com/miekg/dns v1.1.27 // indirect
+	github.com/teambition/rrule-go v1.8.2 // indirect
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
+	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa // indirect
+	golang.org/x/sys v0.13.0 // indirect
+	nhooyr.io/websocket v1.8.17 // indirect
+)
