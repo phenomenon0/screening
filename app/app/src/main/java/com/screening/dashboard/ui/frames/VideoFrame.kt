@@ -97,9 +97,9 @@ fun VideoFrame(
         exoPlayer.playWhenReady = true
     }
 
-    // Poll position for progress bar
+    // Poll position only while playing
     LaunchedEffect(isPlaying) {
-        while (true) {
+        while (isPlaying) {
             positionMs = exoPlayer.currentPosition
             durationMs = exoPlayer.duration.coerceAtLeast(1)
             delay(500)

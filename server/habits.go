@@ -23,10 +23,11 @@ type Habit struct {
 }
 
 type HabitStore struct {
-	mu       sync.RWMutex
-	habits   []Habit
-	path     string
-	onChange func()
+	mu              sync.RWMutex
+	habits          []Habit
+	path            string
+	onChange        func()
+	lastRefreshDate string
 }
 
 func NewHabitStore(dir string, onChange func()) *HabitStore {
@@ -114,6 +115,10 @@ func (hs *HabitStore) Toggle(id string) {
 
 func (hs *HabitStore) refreshToday() {
 	today := time.Now().Format("2006-01-02")
+	if hs.lastRefreshDate == today {
+		return
+	}
+	hs.lastRefreshDate = today
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	changed := false
 	for i := range hs.habits {

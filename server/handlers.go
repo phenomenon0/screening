@@ -21,14 +21,12 @@ import (
 var webFS embed.FS
 
 func handleQRCode(localIP string, port int) http.HandlerFunc {
+	// Generate once at startup — content never changes
+	url := fmt.Sprintf("http://%s:%d", localIP, port)
+	png, _ := qrcode.Encode(url, qrcode.Medium, 256)
 	return func(w http.ResponseWriter, r *http.Request) {
-		url := fmt.Sprintf("http://%s:%d", localIP, port)
-		png, err := qrcode.Encode(url, qrcode.Medium, 256)
-		if err != nil {
-			http.Error(w, "qr error", http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
 		w.Write(png)
 	}
 }

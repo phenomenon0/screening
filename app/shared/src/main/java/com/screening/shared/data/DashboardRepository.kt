@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -66,5 +67,9 @@ class DashboardRepository(private val wsClient: WebSocketClient) {
 
     fun register(deviceType: String, deviceName: String) {
         wsClient.send(ClientMessage(type = "register", deviceType = deviceType, deviceName = deviceName))
+    }
+
+    fun close() {
+        scope.cancel()
     }
 }

@@ -121,22 +121,11 @@ fun SetupScreen(
                 }
             }
 
-            // The buttons need click handlers via key events since this is TV
-            // For now, any D-pad center press while IP is filled triggers connect
-            LaunchedEffect(ip) {
-                // Auto-connect when IP looks valid
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Enter your server IP and press Enter, or use Auto-Scan",
                 style = DashboardTypography.bodyMedium.copy(color = TextDim)
             )
         }
-    }
-
-    // Handle Enter key to connect
-    LaunchedEffect(Unit) {
-        // We rely on the BasicTextField's keyboard action
     }
 }

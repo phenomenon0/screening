@@ -58,14 +58,13 @@ fun DashboardScreen(
     onScreenShareStop: () -> Unit = {},
     onClearForceFrame: () -> Unit = {}
 ) {
-    DashboardTheme {
-        val screenUrl = state.screenShareUrl
-        if (screenUrl != null) {
-            ScreenShareFrame(streamUrl = screenUrl)
-            return@DashboardTheme
-        }
+    val screenUrl = state.screenShareUrl
+    if (screenUrl != null) {
+        ScreenShareFrame(streamUrl = screenUrl)
+        return
+    }
 
-        var activeFrame by remember { mutableIntStateOf(FRAME_IMAGES) }
+    var activeFrame by remember { mutableIntStateOf(FRAME_IMAGES) }
         var showQR by remember { mutableStateOf(false) }
         val focusRequester = remember { FocusRequester() }
         val hasVideos = state.videos.isNotEmpty()
@@ -229,5 +228,4 @@ fun DashboardScreen(
                     .padding(bottom = 24.dp)
             )
         }
-    }
 }

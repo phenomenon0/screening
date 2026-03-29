@@ -99,9 +99,8 @@ class DashboardApp : Application() {
     }
 
     fun connectTo(host: String, port: Int) {
-        if (::wsClient.isInitialized) {
-            wsClient.disconnect()
-        }
+        if (::repository.isInitialized) repository.close()
+        if (::wsClient.isInitialized) wsClient.disconnect()
         serverBaseUrl = "http://$host:$port"
         wsClient = WebSocketClient("ws://$host:$port/ws")
         repository = DashboardRepository(wsClient)

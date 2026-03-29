@@ -6,8 +6,8 @@ import (
 )
 
 type PomodoroState struct {
-	Remaining int  `json:"remaining"` // seconds
-	Duration  int  `json:"duration"`  // total seconds
+	Remaining int  `json:"remaining"`
+	Duration  int  `json:"duration"`
 	Running   bool `json:"running"`
 }
 
@@ -52,13 +52,20 @@ func (p *Pomodoro) tick() {
 		p.state.Remaining--
 		if p.state.Remaining <= 0 {
 			p.state.Remaining = 0
-			p.state.Running = false
-			p.ticker.Stop()
+			p.stop()
 		}
 		p.mu.Unlock()
 		if p.onChange != nil {
 			p.onChange()
 		}
+	}
+}
+
+// stop halts the ticker. Must be called with mu held.
+func (p *Pomodoro) stop() {
+	p.state.Running = false
+	if p.ticker != nil {
+		p.ticker.Stop()
 	}
 }
 
@@ -68,29 +75,20 @@ func (p *Pomodoro) Pause() {
 	if !p.state.Running {
 		return
 	}
-	p.state.Running = false
-	if p.ticker != nil {
-		p.ticker.Stop()
-	}
+	p.stop()
 }
 
 func (p *Pomodoro) Reset() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.state.Running = false
-	if p.ticker != nil {
-		p.ticker.Stop()
-	}
+	p.stop()
 	p.state.Remaining = p.state.Duration
 }
 
 func (p *Pomodoro) Set(minutes int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.state.Running = false
-	if p.ticker != nil {
-		p.ticker.Stop()
-	}
+	p.stop()
 	p.state.Duration = minutes * 60
 	p.state.Remaining = minutes * 60
 }

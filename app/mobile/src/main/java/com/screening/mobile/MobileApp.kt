@@ -50,8 +50,7 @@ class MobileApp : Application() {
             connectTo(host, port)
             _setupComplete.value = true
         } else {
-            // Try mDNS
-            connectTo("127.0.0.1", 9900) // placeholder
+            // No saved server — try mDNS first, don't waste a connection on localhost
             scope.launch {
                 discovery.startDiscovery()
                 try {
@@ -64,6 +63,7 @@ class MobileApp : Application() {
     }
 
     fun connectTo(host: String, port: Int) {
+        if (::repository.isInitialized) repository.close()
         if (::wsClient.isInitialized) wsClient.disconnect()
         serverBaseUrl = "http://$host:$port"
         wsClient = WebSocketClient("ws://$host:$port/ws")
