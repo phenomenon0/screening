@@ -20,6 +20,9 @@ import (
 //go:embed web
 var webFS embed.FS
 
+//go:embed scene
+var sceneFS embed.FS
+
 func handleQRCode(localIP string, port int) http.HandlerFunc {
 	// Generate once at startup — content never changes
 	url := fmt.Sprintf("http://%s:%d", localIP, port)
@@ -41,21 +44,50 @@ func handleWebUI() http.Handler {
 	return http.FileServer(http.FS(sub))
 }
 
-func handleWebSocket(hub *Hub) http.HandlerFunc {
+func handleSceneUI() http.Handler {
+	sub, _ := fs.Sub(sceneFS, "scene")
+	return http.FileServer(http.FS(sub))
+}
+
+func handleSceneList(sm *SceneManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// GET /scenes/ → list all scenes
+		// GET /scenes/{id} → get specific scene JSON
+		path := strings.TrimPrefix(r.URL.Path, "/scenes/")
+		if path == "" || path == "/" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(sm.List())
+			return
+		}
+		// Specific scene
+		id := strings.TrimSuffix(path, ".json")
+		data, err := sm.Get(id)
+		if err != nil {
+			http.Error(w, "scene not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+	}
+}
+
+func handleWebSocket(hub *Hub, fs *FrameStream, ss *SceneStream) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 			InsecureSkipVerify: true,
 		})
+		// Allow large binary messages (JPEG frames from scene renderer)
+		conn.SetReadLimit(1024 * 1024) // 1MB
 		if err != nil {
 			log.Printf("ws accept error: %v", err)
 			return
 		}
 
 		ctx, cancel := context.WithCancel(r.Context())
-		hub.Add(conn, cancel)
+		clientID := hub.Add(conn, cancel)
 		defer hub.Remove(conn)
 
-		log.Printf("ws: client connected from %s", r.RemoteAddr)
+		log.Printf("ws: client %s connected from %s", clientID, r.RemoteAddr)
 
 		if err := hub.SendFullState(ctx, conn); err != nil {
 			log.Printf("ws: send full state error: %v", err)
@@ -63,7 +95,7 @@ func handleWebSocket(hub *Hub) http.HandlerFunc {
 		}
 
 		for {
-			_, data, err := conn.Read(ctx)
+			msgType, data, err := conn.Read(ctx)
 			if err != nil {
 				if websocket.CloseStatus(err) == websocket.StatusNormalClosure ||
 					websocket.CloseStatus(err) == websocket.StatusGoingAway {
@@ -74,12 +106,31 @@ func handleWebSocket(hub *Hub) http.HandlerFunc {
 				return
 			}
 
+			// Binary message = JPEG frame from scene renderer
+			if msgType == websocket.MessageBinary {
+				if fs != nil {
+					fs.PushFrame(data)
+				}
+				if ss != nil {
+					ss.FeedFrame(data)
+				}
+				continue
+			}
+
 			var msg ClientMessage
 			if err := json.Unmarshal(data, &msg); err != nil {
 				continue
 			}
 
 			switch msg.Type {
+			case "register":
+				hub.Register(conn, msg.DeviceType, msg.DeviceName)
+				log.Printf("ws: client %s registered as %s (%s)", clientID, msg.DeviceType, msg.DeviceName)
+				// Enable scene stream when a renderer connects (ffmpeg starts on first frame)
+				if msg.DeviceType == "scene_renderer" && ss != nil {
+					url := ss.Enable()
+					log.Printf("scene stream enabled at %s", url)
+				}
 			case "pong":
 			case "todo_toggle":
 				if hub.todos.Toggle(msg.ID) {
@@ -122,6 +173,14 @@ func handleWebSocket(hub *Hub) http.HandlerFunc {
 				}
 			case "frame_change":
 				hub.Broadcast(ServerMessage{Type: "frame_change", Frame: msg.Frame})
+			case "scene_load":
+				if msg.SceneID != "" {
+					hub.Broadcast(ServerMessage{Type: "scene_load", SceneID: msg.SceneID})
+					hub.Broadcast(ServerMessage{Type: "frame_change", Frame: 5})
+				}
+			case "scene_camera_update":
+				// Relay raw JSON to scene renderers — camera data passes through untouched
+				hub.SendRawToType("scene_renderer", data)
 			case "screen_share_start":
 				hub.HandleScreenShare(true)
 			case "screen_share_stop":
@@ -156,10 +215,11 @@ func handleFileServe(dir string) http.HandlerFunc {
 	}
 }
 
-func handleUpload(imagesDir, videosDir, musicDir string) http.HandlerFunc {
+func handleUpload(imagesDir, videosDir, musicDir, assetsDir string) http.HandlerFunc {
 	imageExtsSet := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".bmp": true}
 	videoExtsSet := map[string]bool{".mp4": true, ".mkv": true, ".webm": true, ".mov": true, ".avi": true}
 	musicExtsSet := map[string]bool{".mp3": true, ".flac": true, ".ogg": true, ".wav": true, ".m4a": true, ".aac": true}
+	assetExtsSet := map[string]bool{".glb": true, ".gltf": true}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -184,6 +244,8 @@ func handleUpload(imagesDir, videosDir, musicDir string) http.HandlerFunc {
 			destDir = videosDir
 		case musicExtsSet[ext]:
 			destDir = musicDir
+		case assetExtsSet[ext]:
+			destDir = assetsDir
 		default:
 			http.Error(w, fmt.Sprintf("unsupported file type: %s", ext), http.StatusBadRequest)
 			return

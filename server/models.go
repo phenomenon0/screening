@@ -10,10 +10,12 @@ type ServerMessage struct {
 	Images []ImageInfo  `json:"images,omitempty"`
 	Videos []VideoInfo  `json:"videos,omitempty"`
 	Music  []MusicTrack `json:"music,omitempty"`
-	URL      string        `json:"url,omitempty"`      // for screen_share_active
-	Habits   []Habit       `json:"habits,omitempty"`
+	URL      string         `json:"url,omitempty"`
+	Habits   []Habit        `json:"habits,omitempty"`
 	Pomodoro *PomodoroState `json:"pomodoro,omitempty"`
-	Frame    int           `json:"frame,omitempty"`   // for frame_change
+	Devices  []DeviceInfo   `json:"devices,omitempty"`
+	Frame    int            `json:"frame,omitempty"`
+	SceneID  string         `json:"scene_id,omitempty"`
 }
 
 type Event struct {
@@ -38,14 +40,24 @@ type ImageInfo struct {
 	URL      string `json:"url"`
 }
 
+type DeviceInfo struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	Connected bool   `json:"connected"`
+}
+
 type ClientMessage struct {
-	Type     string `json:"type"`
-	ID       string `json:"id,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Name     string `json:"name,omitempty"`
-	Priority int    `json:"priority,omitempty"`
-	Minutes  int    `json:"minutes,omitempty"`
-	Frame    int    `json:"frame,omitempty"`
+	Type       string `json:"type"`
+	ID         string `json:"id,omitempty"`
+	Text       string `json:"text,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Priority   int    `json:"priority,omitempty"`
+	Minutes    int    `json:"minutes,omitempty"`
+	Frame      int    `json:"frame,omitempty"`
+	DeviceType string `json:"device_type,omitempty"`
+	DeviceName string `json:"device_name,omitempty"`
+	SceneID    string `json:"scene_id,omitempty"`
 }
 
 type VideoInfo struct {

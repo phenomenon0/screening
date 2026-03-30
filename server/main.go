@@ -67,7 +67,10 @@ func main() {
 	localIP := getLocalIP()
 	var hub *Hub
 
-	dataDir := filepath.Dir(cfg.TodosFile) // ~/.local/share/screening/
+	dataDir := filepath.Dir(cfg.TodosFile)
+	scenesDir := filepath.Join(dataDir, "scenes")
+	assetsDir := filepath.Join(dataDir, "assets")
+	os.MkdirAll(assetsDir, 0755)
 
 	calendar := NewCalendarSource(cfg.ICSPath, func() { hub.BroadcastCalendar() })
 	todos := NewTodoSource(cfg.TodosFile, func() { hub.BroadcastTodos() })
@@ -77,6 +80,9 @@ func main() {
 	screen := NewScreenShare(localIP)
 	pomodoro := NewPomodoro(func() { hub.BroadcastPomodoro() })
 	habits := NewHabitStore(dataDir, func() { hub.BroadcastHabits() })
+
+	scenes := NewSceneManager(scenesDir)
+	scenes.CreateDefault()
 
 	hub = NewHub(calendar, todos, images, videos, music, screen, pomodoro, habits)
 
@@ -90,11 +96,24 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/qr.png", handleQRCode(localIP, cfg.Port))
-	mux.HandleFunc("/ws", handleWebSocket(hub))
-	mux.HandleFunc("/upload", handleUpload(cfg.ImagesDir, cfg.VideosDir, cfg.MusicDir))
+	frameStream := NewFrameStream()
+	sceneStream := NewSceneStream(localIP, cfg.Port)
+	mux.HandleFunc("/ws", handleWebSocket(hub, frameStream, sceneStream))
+	mux.Handle("/scene/hls/", http.StripPrefix("/scene/hls/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Serve HLS segments with no-cache headers
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		http.FileServer(http.Dir(sceneStream.HLSDir())).ServeHTTP(w, r)
+	})))
+	mux.Handle("/scene/stream", frameStream)
+	mux.HandleFunc("/scene/frame", frameStream.LatestFrame)
+	mux.HandleFunc("/upload", handleUpload(cfg.ImagesDir, cfg.VideosDir, cfg.MusicDir, assetsDir))
 	mux.HandleFunc("/images/", handleFileServe(cfg.ImagesDir))
 	mux.HandleFunc("/videos/", handleFileServe(cfg.VideosDir))
 	mux.HandleFunc("/music/", handleFileServe(cfg.MusicDir))
+	mux.HandleFunc("/assets/", handleFileServe(assetsDir))
+	mux.HandleFunc("/scenes/", handleSceneList(scenes))
+	mux.Handle("/scene/", http.StripPrefix("/scene/", handleSceneUI()))
 	mux.Handle("/", handleWebUI())
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

@@ -40,6 +40,7 @@ private const val FRAME_TODO = 1
 private const val FRAME_HABITS = 2
 private const val FRAME_CALENDAR = 3
 private const val FRAME_VIDEOS = 4  // manual only, not in auto-rotation
+private const val FRAME_SCENE = 5   // manual only — 3D scene
 private const val AUTO_FRAME_COUNT = 4  // first 4 auto-rotate
 
 private fun frameDurationMs(frame: Int): Long = when (frame) {
@@ -165,6 +166,10 @@ fun DashboardScreen(
                         FRAME_VIDEOS -> VideoFrame(
                             videos = state.videos,
                             serverBaseUrl = state.serverBaseUrl
+                        )
+                        FRAME_SCENE -> SceneFrame(
+                            serverBaseUrl = state.serverBaseUrl,
+                            sceneId = null
                         )
                     }
                 }

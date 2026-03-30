@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { margin: 0; overflow: hidden; background: #0d0d0d; }
+  canvas { display: block; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #0d0d0d; color: #00D2FF; font-family: sans-serif; font-size: 24px; z-index: 10;
+    flex-direction: column; }
+  #loading.hidden { opacity: 0; pointer-events: none; transition: opacity 0.5s; }
+  #loading .sub { font-size: 14px; color: #606060; margin-top: 8px; }
+  #info { position: fixed; bottom: 8px; right: 8px; color: #333; font: 12px sans-serif; z-index: 2; }
+</style>
+</head>
+<body>
+<div id="loading">
+  <div>Worldcast</div>
+  <div class="sub" id="loadStatus">Initializing...</div>
+</div>
+<div id="info"></div>
+
+<script src="three.min.js"></script>
+<script src="OrbitControls.js"></script>
+<script src="GLTFLoader.js"></script>
+<script src="RGBELoader.js"></script>
+
+<script>
+(function() {
+  // ── Renderer ──
+  var renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(1); // low for performance
+  renderer.shadowMap.enabled = false;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.4;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(renderer.domElement);
+
+  // ── Scene ──
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a1a);
+  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015);
+
+  // ── Camera ──
+  var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 3, 8);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.target.set(0, 1, 0);
+  controls.minDistance = 2;
+  controls.maxDistance = 30;
+  controls.maxPolarAngle = Math.PI * 0.85;
+  controls.update();
+
+  var gltfLoader = new THREE.GLTFLoader();
+  var rgbeLoader = new THREE.RGBELoader();
+  var pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileEquirectangularShader();
+
+  var loadedObjects = {};
+  var hasRemoteCamera = false;
+  var targetQuat = new THREE.Quaternion();
+  var targetDist = 8;
+  var orbitTarget = new THREE.Vector3(0, 1, 0);
+  var frameStreaming = false;
+  var streamWs = null;
+  var clock = new THREE.Clock();
+
+  function setStatus(msg) { document.getElementById('loadStatus').textContent = msg; }
+
+  // Skip HDR on low-end devices, use direct lighting
+  loadSceneData();
+
+  function setupFallbackLights() {
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    var sun = new THREE.DirectionalLight(0xffe8cc, 2);
+    sun.position.set(5, 10, 5);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 50;
+    sun.shadow.camera.left = -10;
+    sun.shadow.camera.right = 10;
+    sun.shadow.camera.top = 10;
+    sun.shadow.camera.bottom = -10;
+    sun.shadow.bias = -0.0001;
+    scene.add(sun);
+    scene.add(new THREE.PointLight(0x00D2FF, 1, 20).translateX(-4).translateY(4).translateZ(-2));
+    scene.add(new THREE.PointLight(0xFF5252, 0.5, 15).translateX(3).translateY(2).translateZ(-5));
+  }
+
+  // Strong lighting setup
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+  var keyLight = new THREE.DirectionalLight(0xffe8cc, 2);
+  keyLight.position.set(5, 10, 5);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.camera.near = 0.5; keyLight.shadow.camera.far = 50;
+  keyLight.shadow.camera.left = -10; keyLight.shadow.camera.right = 10;
+  keyLight.shadow.camera.top = 10; keyLight.shadow.camera.bottom = -10;
+  keyLight.shadow.bias = -0.0001;
+  scene.add(keyLight);
+
+  var fillLight = new THREE.DirectionalLight(0x8888ff, 0.5);
+  fillLight.position.set(-5, 5, -3);
+  scene.add(fillLight);
+
+  var rimLight = new THREE.PointLight(0x00D2FF, 2, 25);
+  rimLight.position.set(-4, 4, -2);
+  scene.add(rimLight);
+
+  var backLight = new THREE.PointLight(0xFF5252, 1, 20);
+  backLight.position.set(3, 2, -5);
+  scene.add(backLight);
+
+  // ── Ground ──
+  var groundGeo = new THREE.PlaneGeometry(40, 40);
+  var groundMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a2e,
+    roughness: 0.9,
+    metalness: 0.1
+  });
+  var ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Subtle grid
+  var grid = new THREE.GridHelper(40, 40, 0x333355, 0x222244);
+  grid.material.opacity = 0.3;
+  grid.material.transparent = true;
+  scene.add(grid);
+
+  // ── Scene loading ──
+  function loadSceneData() {
+    var params = new URLSearchParams(window.location.search);
+    var sceneId = params.get('id') || 'demo';
+    setStatus('Loading scene...');
+    fetch('/scenes/' + sceneId)
+      .then(function(r) { return r.json(); })
+      .then(function(s) { applyScene(s); })
+      .catch(function(e) { setStatus('Error: ' + e.message); });
+  }
+
+  function applyScene(s) {
+    if (!s) { hideLoading(); return; }
+
+    if (s.environment && s.environment.background) {
+      scene.background = new THREE.Color(s.environment.background);
+      scene.fog = new THREE.FogExp2(new THREE.Color(s.environment.background), 0.015);
+    }
+
+    if (s.camera) {
+      if (s.camera.position) camera.position.set(s.camera.position[0], s.camera.position[1], s.camera.position[2]);
+      if (s.camera.target) {
+        controls.target.set(s.camera.target[0], s.camera.target[1], s.camera.target[2]);
+        orbitTarget.set(s.camera.target[0], s.camera.target[1], s.camera.target[2]);
+        targetDist = camera.position.distanceTo(orbitTarget);
+      }
+      if (s.camera.fov) { camera.fov = s.camera.fov; camera.updateProjectionMatrix(); }
+      controls.update();
+    }
+
+    if (!s.objects || s.objects.length === 0) { hideLoading(); return; }
+
+    var total = s.objects.length, loaded = 0;
+    s.objects.forEach(function(obj) {
+      setStatus('Loading ' + (obj.name || obj.asset) + '...');
+      gltfLoader.load('/assets/' + obj.asset,
+        function(gltf) {
+          var model = gltf.scene;
+          if (obj.position) model.position.set(obj.position[0], obj.position[1], obj.position[2]);
+          if (obj.rotation) model.rotation.set(
+            THREE.MathUtils.degToRad(obj.rotation[0]),
+            THREE.MathUtils.degToRad(obj.rotation[1]),
+            THREE.MathUtils.degToRad(obj.rotation[2])
+          );
+          if (obj.scale) model.scale.set(obj.scale[0], obj.scale[1], obj.scale[2]);
+
+          // Fix materials and apply environment
+          model.traverse(function(child) {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              var mat = child.material;
+              // Fix texture encoding for proper color
+              if (mat.map) mat.map.encoding = THREE.sRGBEncoding;
+              if (mat.emissiveMap) mat.emissiveMap.encoding = THREE.sRGBEncoding;
+              // Apply environment for reflections
+              if (scene.environment) {
+                mat.envMap = scene.environment;
+                mat.envMapIntensity = 1.0;
+              }
+              mat.needsUpdate = true;
+            }
+          });
+
+          model.userData.id = obj.id;
+          model.userData.name = obj.name;
+          scene.add(model);
+          loadedObjects[obj.id] = model;
+
+          if (++loaded >= total) hideLoading();
+        },
+        function(p) {
+          if (p.total) setStatus('Loading ' + (obj.name || obj.asset) + ' ' + Math.round(p.loaded/p.total*100) + '%');
+        },
+        function(err) {
+          console.warn('Failed: ' + obj.asset, err);
+          if (++loaded >= total) hideLoading();
+        }
+      );
+    });
+  }
+
+  function hideLoading() {
+    document.getElementById('loading').classList.add('hidden');
+  }
+
+  // ── WebSocket ──
+  function connectWS() {
+    var ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws');
+    streamWs = ws;
+    ws.onopen = function() {
+      ws.send(JSON.stringify({ type: 'register', device_type: 'scene_renderer', device_name: 'Worldcast Renderer' }));
+      // Auto-start frame streaming
+      frameStreaming = true;
+    };
+    ws.onmessage = function(e) {
+      try {
+        var msg = JSON.parse(e.data);
+        if ((msg.type === 'scene_camera_sync' || msg.type === 'scene_camera_update') && msg.camera) {
+          hasRemoteCamera = true;
+          controls.enabled = false;
+          var c = msg.camera;
+          if (c.quaternion) targetQuat.set(c.quaternion[0], c.quaternion[1], c.quaternion[2], c.quaternion[3]);
+          if (c.distance !== undefined) targetDist = c.distance;
+          if (c.target) orbitTarget.set(c.target[0], c.target[1], c.target[2]);
+        } else if (msg.type === 'scene_load' && msg.scene_id) {
+          loadSceneData();
+        } else if (msg.type === 'scene_object_selected' && msg.objectId) {
+          highlightObject(msg.objectId);
+        } else if (msg.type === 'start_frame_stream') { frameStreaming = true; }
+        else if (msg.type === 'stop_frame_stream') { frameStreaming = false; }
+        else if (msg.type === 'ping') { ws.send(JSON.stringify({ type: 'pong' })); }
+      } catch(err) {}
+    };
+    ws.onclose = function() { setTimeout(connectWS, 2000); };
+  }
+  connectWS();
+
+  function highlightObject(id) {
+    Object.values(loadedObjects).forEach(function(obj) {
+      obj.traverse(function(c) {
+        if (c.isMesh && c.userData._origEmissive !== undefined) {
+          c.material.emissive.setHex(c.userData._origEmissive);
+          c.material.emissiveIntensity = c.userData._origEmissiveInt || 0;
+        }
+      });
+    });
+    var obj = loadedObjects[id];
+    if (obj) {
+      obj.traverse(function(c) {
+        if (c.isMesh) {
+          c.userData._origEmissive = c.material.emissive.getHex();
+          c.userData._origEmissiveInt = c.material.emissiveIntensity;
+          c.material.emissive.setHex(0x00D2FF);
+          c.material.emissiveIntensity = 0.4;
+        }
+      });
+    }
+  }
+
+  // ── Frame streaming ──
+  var frameCount = 0;
+  var sentFrames = 0;
+  function captureAndStream() {
+    if (!frameStreaming) return;
+    if (!streamWs || streamWs.readyState !== 1) return;
+    frameCount++;
+    if (frameCount % 3 !== 0) return; // every 3rd frame ≈ 20fps
+    try {
+      renderer.domElement.toBlob(function(blob) {
+        if (blob && streamWs && streamWs.readyState === 1) {
+          streamWs.send(blob);
+          sentFrames++;
+        }
+      }, 'image/jpeg', 0.7);
+    } catch(e) {
+      console.error('toBlob error:', e);
+    }
+  }
+
+  // ── Animate ──
+  var fps = 0, lastFpsTime = 0;
+  function animate(time) {
+    requestAnimationFrame(animate);
+    var dt = clock.getDelta();
+
+    if (hasRemoteCamera) {
+      camera.quaternion.slerp(targetQuat, 0.4);
+      var dir = new THREE.Vector3(0, 0, 1).applyQuaternion(camera.quaternion);
+      camera.position.copy(orbitTarget).add(dir.multiplyScalar(targetDist));
+    } else {
+      controls.update();
+    }
+
+    // Subtle light animation
+    rimLight.position.x = Math.sin(time * 0.0005) * 5;
+    rimLight.position.z = Math.cos(time * 0.0005) * 5;
+
+    renderer.render(scene, camera);
+    captureAndStream();
+
+    fps++;
+    if (time - lastFpsTime > 1000) {
+      document.getElementById('info').textContent = fps + ' fps' + (frameStreaming ? ' [streaming: ' + sentFrames + ' sent]' : '') + ' ws:' + (streamWs ? streamWs.readyState : 'null');
+      fps = 0; lastFpsTime = time;
+    }
+  }
+  animate(0);
+
+  window.addEventListener('resize', function() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+</script>
+</body>
+</html>

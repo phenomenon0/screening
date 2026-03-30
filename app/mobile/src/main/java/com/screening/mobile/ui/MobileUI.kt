@@ -40,7 +40,7 @@ fun MobileUI(
     serverBaseUrl: String
 ) {
     var currentTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Remote", "Todos", "Habits", "Timer")
+    val tabs = listOf("Remote", "Todos", "Habits", "Timer", "3D")
 
     Column(
         modifier = Modifier
@@ -78,6 +78,7 @@ fun MobileUI(
                 1 -> TodosTab(state, repo)
                 2 -> HabitsTab(state, repo)
                 3 -> TimerTab(state, repo)
+                4 -> SceneControllerTab(state, repo)
             }
         }
 
@@ -90,7 +91,7 @@ fun MobileUI(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             tabs.forEachIndexed { i, label ->
-                val icons = listOf("📺", "✅", "🔥", "⏱")
+                val icons = listOf("📺", "✅", "🔥", "⏱", "🌐")
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier

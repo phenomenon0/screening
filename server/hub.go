@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -10,9 +11,18 @@ import (
 	"nhooyr.io/websocket"
 )
 
+type ClientInfo struct {
+	Conn       *websocket.Conn
+	Cancel     context.CancelFunc
+	DeviceType string // "tv", "mobile", "scene_renderer", "dashboard"
+	DeviceName string
+	ID         string
+}
+
 type Hub struct {
 	mu      sync.RWMutex
-	clients map[*websocket.Conn]context.CancelFunc
+	clients map[*websocket.Conn]*ClientInfo
+	nextID  int
 
 	calendar *CalendarSource
 	todos    *TodoSource
@@ -26,25 +36,56 @@ type Hub struct {
 
 func NewHub(cal *CalendarSource, todos *TodoSource, imgs *ImageSource, vids *VideoSource, mus *MusicSource, scr *ScreenShare, pomo *Pomodoro, hab *HabitStore) *Hub {
 	return &Hub{
-		clients:  make(map[*websocket.Conn]context.CancelFunc),
+		clients:  make(map[*websocket.Conn]*ClientInfo),
 		calendar: cal, todos: todos, images: imgs, videos: vids,
 		music: mus, screen: scr, pomodoro: pomo, habits: hab,
 	}
 }
 
-func (h *Hub) Add(conn *websocket.Conn, cancel context.CancelFunc) {
+func (h *Hub) Add(conn *websocket.Conn, cancel context.CancelFunc) string {
 	h.mu.Lock()
-	h.clients[conn] = cancel
+	h.nextID++
+	id := fmt.Sprintf("c%d", h.nextID)
+	h.clients[conn] = &ClientInfo{Conn: conn, Cancel: cancel, ID: id, DeviceType: "unknown"}
 	h.mu.Unlock()
+	return id
+}
+
+func (h *Hub) Register(conn *websocket.Conn, deviceType, deviceName string) {
+	h.mu.Lock()
+	if ci, ok := h.clients[conn]; ok {
+		ci.DeviceType = deviceType
+		ci.DeviceName = deviceName
+	}
+	h.mu.Unlock()
+	h.BroadcastDevices()
 }
 
 func (h *Hub) Remove(conn *websocket.Conn) {
 	h.mu.Lock()
-	if cancel, ok := h.clients[conn]; ok {
-		cancel()
+	if ci, ok := h.clients[conn]; ok {
+		ci.Cancel()
 		delete(h.clients, conn)
 	}
 	h.mu.Unlock()
+	h.BroadcastDevices()
+}
+
+func (h *Hub) Devices() []DeviceInfo {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	var out []DeviceInfo
+	for _, ci := range h.clients {
+		if ci.DeviceType != "unknown" {
+			out = append(out, DeviceInfo{
+				ID:        ci.ID,
+				Type:      ci.DeviceType,
+				Name:      ci.DeviceName,
+				Connected: true,
+			})
+		}
+	}
+	return out
 }
 
 func (h *Hub) SendFullState(ctx context.Context, conn *websocket.Conn) error {
@@ -57,6 +98,7 @@ func (h *Hub) SendFullState(ctx context.Context, conn *websocket.Conn) error {
 		{Type: "music_sync", Music: h.music.List()},
 		{Type: "habit_sync", Habits: h.habits.List()},
 		{Type: "pomodoro_sync", Pomodoro: &pomoState},
+		{Type: "devices_sync", Devices: h.Devices()},
 	}
 	if h.screen.IsActive() {
 		msgs = append(msgs, ServerMessage{Type: "screen_share_active", URL: h.screen.streamURL()})
@@ -76,16 +118,55 @@ func (h *Hub) SendFullState(ctx context.Context, conn *websocket.Conn) error {
 func (h *Hub) Broadcast(msg ServerMessage) {
 	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("broadcast marshal error: %v", err)
 		return
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for conn := range h.clients {
+	for _, ci := range h.clients {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		if err := ci.Conn.Write(ctx, websocket.MessageText, data); err != nil {
 			cancel()
-			go h.Remove(conn)
+			go h.Remove(ci.Conn)
+			continue
+		}
+		cancel()
+	}
+}
+
+// SendToType sends a message only to clients of a specific device type.
+func (h *Hub) SendToType(deviceType string, msg ServerMessage) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, ci := range h.clients {
+		if ci.DeviceType != deviceType {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := ci.Conn.Write(ctx, websocket.MessageText, data); err != nil {
+			cancel()
+			go h.Remove(ci.Conn)
+			continue
+		}
+		cancel()
+	}
+}
+
+// SendRawToType sends pre-serialized bytes to clients of a specific type.
+func (h *Hub) SendRawToType(deviceType string, data []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, ci := range h.clients {
+		if ci.DeviceType != deviceType {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := ci.Conn.Write(ctx, websocket.MessageText, data); err != nil {
+			cancel()
+			go h.Remove(ci.Conn)
 			continue
 		}
 		cancel()
@@ -98,6 +179,7 @@ func (h *Hub) BroadcastImages()   { h.Broadcast(ServerMessage{Type: "image_sync"
 func (h *Hub) BroadcastVideos()   { h.Broadcast(ServerMessage{Type: "video_sync", Videos: h.videos.List()}) }
 func (h *Hub) BroadcastMusic()    { h.Broadcast(ServerMessage{Type: "music_sync", Music: h.music.List()}) }
 func (h *Hub) BroadcastHabits()   { h.Broadcast(ServerMessage{Type: "habit_sync", Habits: h.habits.List()}) }
+func (h *Hub) BroadcastDevices()  { h.Broadcast(ServerMessage{Type: "devices_sync", Devices: h.Devices()}) }
 func (h *Hub) BroadcastPomodoro() {
 	s := h.pomodoro.State()
 	h.Broadcast(ServerMessage{Type: "pomodoro_sync", Pomodoro: &s})

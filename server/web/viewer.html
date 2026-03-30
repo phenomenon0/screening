@@ -1,0 +1,24 @@
+<!DOCTYPE html><html><head>
+<style>body{margin:0;background:#0d0d0d;overflow:hidden}
+#f{width:100vw;height:100vh;object-fit:contain}
+#msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#00D2FF;font:20px sans-serif;text-align:center;flex-direction:column}
+#msg small{color:#606060;margin-top:8px}
+</style></head><body>
+<div id="msg"><div>Waiting for scene stream...</div><small>Open the scene page on your PC</small></div>
+<img id="f" style="display:none">
+<script>
+var img=document.getElementById('f'),msg=document.getElementById('msg');
+var buf=new Image();
+function poll(){
+  buf.onload=function(){
+    img.src=buf.src;
+    img.style.display='block';
+    msg.style.display='none';
+    setTimeout(poll,66);
+  };
+  buf.onerror=function(){setTimeout(poll,1000);};
+  buf.src='/scene/frame?t='+Date.now();
+}
+poll();
+</script>
+</body></html>

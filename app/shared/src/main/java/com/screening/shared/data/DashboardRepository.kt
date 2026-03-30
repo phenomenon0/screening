@@ -65,6 +65,10 @@ class DashboardRepository(private val wsClient: WebSocketClient) {
     fun screenShareStop() = wsClient.send(ClientMessage(type = "screen_share_stop"))
     fun clearForceFrame() { _state.update { it.copy(forceFrame = null) } }
 
+    fun sendRaw(json: String) {
+        try { wsClient.sendRaw(json) } catch (_: Exception) {}
+    }
+
     fun register(deviceType: String, deviceName: String) {
         wsClient.send(ClientMessage(type = "register", deviceType = deviceType, deviceName = deviceName))
     }

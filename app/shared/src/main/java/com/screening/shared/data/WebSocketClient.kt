@@ -86,6 +86,10 @@ class WebSocketClient(private val serverUrl: String) {
         } catch (_: Exception) {}
     }
 
+    fun sendRaw(text: String) {
+        webSocket?.send(text)
+    }
+
     fun disconnect() {
         running.set(false)
         webSocket?.close(1000, "App closing")
