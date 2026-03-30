@@ -15,6 +15,7 @@ type Pomodoro struct {
 	mu       sync.RWMutex
 	state    PomodoroState
 	ticker   *time.Ticker
+	done     chan struct{}
 	onChange func()
 }
 
@@ -39,24 +40,30 @@ func (p *Pomodoro) Start() {
 	}
 	p.state.Running = true
 	p.ticker = time.NewTicker(1 * time.Second)
+	p.done = make(chan struct{})
 	go p.tick()
 }
 
 func (p *Pomodoro) tick() {
-	for range p.ticker.C {
-		p.mu.Lock()
-		if !p.state.Running {
-			p.mu.Unlock()
+	for {
+		select {
+		case <-p.done:
 			return
-		}
-		p.state.Remaining--
-		if p.state.Remaining <= 0 {
-			p.state.Remaining = 0
-			p.stop()
-		}
-		p.mu.Unlock()
-		if p.onChange != nil {
-			p.onChange()
+		case <-p.ticker.C:
+			p.mu.Lock()
+			if !p.state.Running {
+				p.mu.Unlock()
+				return
+			}
+			p.state.Remaining--
+			if p.state.Remaining <= 0 {
+				p.state.Remaining = 0
+				p.stop()
+			}
+			p.mu.Unlock()
+			if p.onChange != nil {
+				p.onChange()
+			}
 		}
 	}
 }
@@ -66,6 +73,10 @@ func (p *Pomodoro) stop() {
 	p.state.Running = false
 	if p.ticker != nil {
 		p.ticker.Stop()
+	}
+	if p.done != nil {
+		close(p.done)
+		p.done = nil
 	}
 }
 

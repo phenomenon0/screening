@@ -116,20 +116,29 @@ func (cs *CalendarSource) Watch(done <-chan struct{}) {
 	}
 	log.Printf("calendar: watching %s", cs.path)
 
+	var debounce *time.Timer
 	for {
 		select {
 		case <-done:
+			if debounce != nil {
+				debounce.Stop()
+			}
 			return
 		case event, ok := <-watcher.Events:
 			if !ok {
 				return
 			}
 			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
-				log.Printf("calendar: file changed, reloading")
-				cs.reload()
-				if cs.onChange != nil {
-					cs.onChange()
+				if debounce != nil {
+					debounce.Stop()
 				}
+				debounce = time.AfterFunc(300*time.Millisecond, func() {
+					log.Printf("calendar: file changed, reloading")
+					cs.reload()
+					if cs.onChange != nil {
+						cs.onChange()
+					}
+				})
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {

@@ -76,12 +76,12 @@ func handleWebSocket(hub *Hub, fs *FrameStream, ss *SceneStream) http.HandlerFun
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 			InsecureSkipVerify: true,
 		})
-		// Allow large binary messages (JPEG frames from scene renderer)
-		conn.SetReadLimit(1024 * 1024) // 1MB
 		if err != nil {
 			log.Printf("ws accept error: %v", err)
 			return
 		}
+		// Allow large binary messages (JPEG frames from scene renderer)
+		conn.SetReadLimit(1024 * 1024) // 1MB
 
 		ctx, cancel := context.WithCancel(r.Context())
 		clientID := hub.Add(conn, cancel)

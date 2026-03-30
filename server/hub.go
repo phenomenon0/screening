@@ -121,12 +121,16 @@ func (h *Hub) Broadcast(msg ServerMessage) {
 		return
 	}
 	h.mu.RLock()
-	defer h.mu.RUnlock()
+	snapshot := make([]*ClientInfo, 0, len(h.clients))
 	for _, ci := range h.clients {
+		snapshot = append(snapshot, ci)
+	}
+	h.mu.RUnlock()
+	for _, ci := range snapshot {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := ci.Conn.Write(ctx, websocket.MessageText, data); err != nil {
 			cancel()
-			go h.Remove(ci.Conn)
+			h.Remove(ci.Conn)
 			continue
 		}
 		cancel()
@@ -140,15 +144,18 @@ func (h *Hub) SendToType(deviceType string, msg ServerMessage) {
 		return
 	}
 	h.mu.RLock()
-	defer h.mu.RUnlock()
+	snapshot := make([]*ClientInfo, 0, len(h.clients))
 	for _, ci := range h.clients {
-		if ci.DeviceType != deviceType {
-			continue
+		if ci.DeviceType == deviceType {
+			snapshot = append(snapshot, ci)
 		}
+	}
+	h.mu.RUnlock()
+	for _, ci := range snapshot {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := ci.Conn.Write(ctx, websocket.MessageText, data); err != nil {
 			cancel()
-			go h.Remove(ci.Conn)
+			h.Remove(ci.Conn)
 			continue
 		}
 		cancel()
@@ -158,15 +165,18 @@ func (h *Hub) SendToType(deviceType string, msg ServerMessage) {
 // SendRawToType sends pre-serialized bytes to clients of a specific type.
 func (h *Hub) SendRawToType(deviceType string, data []byte) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
+	snapshot := make([]*ClientInfo, 0, len(h.clients))
 	for _, ci := range h.clients {
-		if ci.DeviceType != deviceType {
-			continue
+		if ci.DeviceType == deviceType {
+			snapshot = append(snapshot, ci)
 		}
+	}
+	h.mu.RUnlock()
+	for _, ci := range snapshot {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := ci.Conn.Write(ctx, websocket.MessageText, data); err != nil {
 			cancel()
-			go h.Remove(ci.Conn)
+			h.Remove(ci.Conn)
 			continue
 		}
 		cancel()

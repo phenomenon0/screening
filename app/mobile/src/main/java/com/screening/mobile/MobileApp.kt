@@ -10,6 +10,7 @@ import com.screening.shared.data.WebSocketClient
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 
@@ -69,6 +70,10 @@ class MobileApp : Application() {
         wsClient = WebSocketClient("ws://$host:$port/ws")
         repository = DashboardRepository(wsClient)
         wsClient.connect()
+        scope.launch {
+            wsClient.connected.filter { it }.first()
+            repository.register("mobile", android.os.Build.MODEL + " Remote")
+        }
     }
 
     fun saveAndConnect(host: String, port: Int = 9900) {

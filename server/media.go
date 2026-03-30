@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -179,19 +180,28 @@ func (vs *VideoSource) Watch(done <-chan struct{}) {
 		return
 	}
 	log.Printf("videos: watching %s", vs.dir)
+	var debounce *time.Timer
 	for {
 		select {
 		case <-done:
+			if debounce != nil {
+				debounce.Stop()
+			}
 			return
 		case event, ok := <-watcher.Events:
 			if !ok {
 				return
 			}
 			if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
-				vs.scan()
-				if vs.onChange != nil {
-					vs.onChange()
+				if debounce != nil {
+					debounce.Stop()
 				}
+				debounce = time.AfterFunc(300*time.Millisecond, func() {
+					vs.scan()
+					if vs.onChange != nil {
+						vs.onChange()
+					}
+				})
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
@@ -220,19 +230,28 @@ func (is *ImageSource) Watch(done <-chan struct{}) {
 	}
 	log.Printf("images: watching %s", is.dir)
 
+	var debounce *time.Timer
 	for {
 		select {
 		case <-done:
+			if debounce != nil {
+				debounce.Stop()
+			}
 			return
 		case event, ok := <-watcher.Events:
 			if !ok {
 				return
 			}
 			if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
-				is.scan()
-				if is.onChange != nil {
-					is.onChange()
+				if debounce != nil {
+					debounce.Stop()
 				}
+				debounce = time.AfterFunc(300*time.Millisecond, func() {
+					is.scan()
+					if is.onChange != nil {
+						is.onChange()
+					}
+				})
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {

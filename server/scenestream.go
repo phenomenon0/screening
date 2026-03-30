@@ -18,6 +18,7 @@ type SceneStream struct {
 	ffmpegStdin io.WriteCloser
 	active      bool
 	started     bool // ffmpeg process started
+	failCount   int
 	hlsDir      string
 	localIP     string
 	serverPort  int
@@ -35,6 +36,7 @@ func (ss *SceneStream) Enable() string {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	ss.active = true
+	ss.failCount = 0
 	log.Printf("scene stream: enabled, waiting for frames")
 	return ss.StreamURL()
 }
@@ -111,11 +113,15 @@ func (ss *SceneStream) FeedFrame(jpeg []byte) {
 
 	// Start ffmpeg lazily on first frame
 	if !ss.started {
-		if err := ss.startFFmpeg(); err != nil {
-			log.Printf("scene stream: failed to start ffmpeg: %v", err)
-			ss.active = false // don't keep retrying
+		if ss.failCount >= 3 {
 			return
 		}
+		if err := ss.startFFmpeg(); err != nil {
+			ss.failCount++
+			log.Printf("scene stream: failed to start ffmpeg (attempt %d/3): %v", ss.failCount, err)
+			return
+		}
+		ss.failCount = 0
 	}
 
 	if ss.ffmpegStdin == nil {

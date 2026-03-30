@@ -1,6 +1,7 @@
 package com.screening.dashboard.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -95,6 +96,7 @@ fun SetupScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .background(AccentCyan)
+                        .clickable { if (ip.isNotBlank()) onConnect(ip.trim(), 9900) }
                         .focusable()
                         .padding(horizontal = 32.dp, vertical = 14.dp),
                     contentAlignment = Alignment.Center
@@ -110,6 +112,7 @@ fun SetupScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .background(DarkCard)
+                        .clickable { onScan() }
                         .focusable()
                         .padding(horizontal = 32.dp, vertical = 14.dp),
                     contentAlignment = Alignment.Center

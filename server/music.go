@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -89,19 +90,28 @@ func (ms *MusicSource) Watch(done <-chan struct{}) {
 		return
 	}
 	log.Printf("music: watching %s", ms.dir)
+	var debounce *time.Timer
 	for {
 		select {
 		case <-done:
+			if debounce != nil {
+				debounce.Stop()
+			}
 			return
 		case event, ok := <-watcher.Events:
 			if !ok {
 				return
 			}
 			if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
-				ms.scan()
-				if ms.onChange != nil {
-					ms.onChange()
+				if debounce != nil {
+					debounce.Stop()
 				}
+				debounce = time.AfterFunc(300*time.Millisecond, func() {
+					ms.scan()
+					if ms.onChange != nil {
+						ms.onChange()
+					}
+				})
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
