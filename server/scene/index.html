@@ -63,9 +63,12 @@
 
   var loadedObjects = {};
   var hasRemoteCamera = false;
-  var targetQuat = new THREE.Quaternion();
+  var targetAzimuth = 0;
+  var targetElevation = 0.3;
   var targetDist = 8;
   var orbitTarget = new THREE.Vector3(0, 1, 0);
+  var currentAzimuth = 0;
+  var currentElevation = 0.3;
   var frameStreaming = false;
   var streamWs = null;
   var clock = new THREE.Clock();
@@ -238,7 +241,8 @@
           hasRemoteCamera = true;
           controls.enabled = false;
           var c = msg.camera;
-          if (c.quaternion) targetQuat.set(c.quaternion[0], c.quaternion[1], c.quaternion[2], c.quaternion[3]);
+          if (c.azimuth !== undefined) targetAzimuth = c.azimuth;
+          if (c.elevation !== undefined) targetElevation = c.elevation;
           if (c.distance !== undefined) targetDist = c.distance;
           if (c.target) orbitTarget.set(c.target[0], c.target[1], c.target[2]);
         } else if (msg.type === 'scene_load' && msg.scene_id) {
@@ -283,17 +287,15 @@
     if (!frameStreaming) return;
     if (!streamWs || streamWs.readyState !== 1) return;
     frameCount++;
-    if (frameCount % 3 !== 0) return; // every 3rd frame ≈ 20fps
+    if (frameCount % 2 !== 0) return; // every 2nd frame ≈ 30fps
     try {
       renderer.domElement.toBlob(function(blob) {
         if (blob && streamWs && streamWs.readyState === 1) {
           streamWs.send(blob);
           sentFrames++;
         }
-      }, 'image/jpeg', 0.7);
-    } catch(e) {
-      console.error('toBlob error:', e);
-    }
+      }, 'image/jpeg', 0.5);
+    } catch(e) {}
   }
 
   // ── Animate ──
@@ -303,9 +305,15 @@
     var dt = clock.getDelta();
 
     if (hasRemoteCamera) {
-      camera.quaternion.slerp(targetQuat, 0.4);
-      var dir = new THREE.Vector3(0, 0, 1).applyQuaternion(camera.quaternion);
-      camera.position.copy(orbitTarget).add(dir.multiplyScalar(targetDist));
+      // Smooth interpolation toward target orbit angles
+      currentAzimuth += (targetAzimuth - currentAzimuth) * 0.3;
+      currentElevation += (targetElevation - currentElevation) * 0.3;
+      // Spherical to cartesian: orbit around target
+      var x = targetDist * Math.cos(currentElevation) * Math.sin(currentAzimuth);
+      var y = targetDist * Math.sin(currentElevation);
+      var z = targetDist * Math.cos(currentElevation) * Math.cos(currentAzimuth);
+      camera.position.set(orbitTarget.x + x, orbitTarget.y + y, orbitTarget.z + z);
+      camera.lookAt(orbitTarget);
     } else {
       controls.update();
     }

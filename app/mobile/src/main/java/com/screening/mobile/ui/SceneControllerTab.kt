@@ -42,15 +42,36 @@ fun SceneControllerTab(state: DashboardState, repo: DashboardRepository) {
     val sensorManager = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
     var gyroQuaternion by remember { mutableStateOf(floatArrayOf(0f, 0f, 0f, 1f)) }
 
+    // Gyro: track orientation changes as deltas to orbit angles
+    var calibrated by remember { mutableStateOf(false) }
+    var refPitch by remember { mutableFloatStateOf(0f) }
+    var refRoll by remember { mutableFloatStateOf(0f) }
+
     DisposableEffect(useGyro) {
         if (!useGyro) return@DisposableEffect onDispose {}
 
         val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+        val rotMat = FloatArray(9)
+        val orientation = FloatArray(3)
+
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                val q = FloatArray(4)
-                SensorManager.getQuaternionFromVector(q, event.values)
-                gyroQuaternion = q
+                SensorManager.getRotationMatrixFromVector(rotMat, event.values)
+                SensorManager.getOrientation(rotMat, orientation)
+                // orientation[0] = azimuth, [1] = pitch, [2] = roll
+                val pitch = orientation[1] // tilt forward/back
+                val roll = orientation[2]  // tilt left/right
+
+                if (!calibrated) {
+                    refPitch = pitch
+                    refRoll = roll
+                    calibrated = true
+                    return
+                }
+
+                // Map phone tilt to orbit: roll → azimuth, pitch → elevation
+                orbitX = (roll - refRoll) * 2f  // left/right tilt orbits horizontally
+                orbitY = (0.3f + (pitch - refPitch) * 1.5f).coerceIn(-1.2f, 1.5f) // forward/back tilt orbits vertically
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
@@ -59,24 +80,15 @@ fun SceneControllerTab(state: DashboardState, repo: DashboardRepository) {
         }
         onDispose {
             sensorManager.unregisterListener(listener)
+            calibrated = false
         }
     }
 
-    // Send camera updates at 30Hz
-    LaunchedEffect(useGyro, orbitX, orbitY) {
+    // Send orbit angles (not quaternions) at 60Hz — renderer converts to camera position
+    LaunchedEffect(useGyro, orbitX, orbitY, distance) {
         while (true) {
-            if (useGyro) {
-                val q = gyroQuaternion
-                repo.sendRaw("""{"type":"scene_camera_update","camera":{"quaternion":[${q[0]},${q[1]},${q[2]},${q[3]}],"distance":$distance,"target":[0,0.5,0]}}""")
-            } else {
-                // Convert orbit angles to quaternion
-                val cx = Math.cos(orbitX.toDouble()).toFloat()
-                val sx = Math.sin(orbitX.toDouble()).toFloat()
-                val cy = Math.cos(orbitY.toDouble()).toFloat()
-                val sy = Math.sin(orbitY.toDouble()).toFloat()
-                repo.sendRaw("""{"type":"scene_camera_update","camera":{"quaternion":[${sy*cx},${cy},${sy*sx},${cx*cy}],"distance":$distance,"target":[0,0.5,0]}}""")
-            }
-            delay(16) // ~60Hz for smooth control
+            repo.sendRaw("""{"type":"scene_camera_update","camera":{"azimuth":$orbitX,"elevation":$orbitY,"distance":$distance,"target":[0,0.5,0]}}""")
+            delay(16)
         }
     }
 

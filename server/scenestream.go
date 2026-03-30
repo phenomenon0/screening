@@ -4,73 +4,73 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
+	"net/http"
 	"os/exec"
-	"path/filepath"
 	"sync"
 )
 
-// SceneStream collects JPEG frames from the browser renderer and pipes them
-// through ffmpeg to produce HLS segments. ffmpeg starts lazily on first frame.
+// SceneStream pipes JPEG frames through ffmpeg to produce a continuous
+// MPEGTS stream served over HTTP. ExoPlayer plays it as a progressive stream.
 type SceneStream struct {
 	mu          sync.Mutex
 	ffmpeg      *exec.Cmd
 	ffmpegStdin io.WriteCloser
 	active      bool
-	started     bool // ffmpeg process started
+	started     bool
 	failCount   int
-	hlsDir      string
 	localIP     string
 	serverPort  int
 	frameCount  int
+
+	// Ring buffer of recent encoded output for new viewers
+	outMu   sync.RWMutex
+	viewers map[chan []byte]bool
 }
 
 func NewSceneStream(localIP string, serverPort int) *SceneStream {
-	hlsDir := filepath.Join(os.TempDir(), "screening-hls")
-	os.MkdirAll(hlsDir, 0755)
-	return &SceneStream{hlsDir: hlsDir, localIP: localIP, serverPort: serverPort}
+	return &SceneStream{
+		localIP:    localIP,
+		serverPort: serverPort,
+		viewers:    make(map[chan []byte]bool),
+	}
 }
 
-// Enable marks the stream as active (accepting frames). ffmpeg starts on first frame.
 func (ss *SceneStream) Enable() string {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	ss.active = true
 	ss.failCount = 0
-	log.Printf("scene stream: enabled, waiting for frames")
+	log.Printf("scene stream: enabled")
 	return ss.StreamURL()
 }
 
 func (ss *SceneStream) startFFmpeg() error {
-	// Clean old segments
-	files, _ := filepath.Glob(filepath.Join(ss.hlsDir, "*"))
-	for _, f := range files {
-		os.Remove(f)
-	}
-
-	playlistPath := filepath.Join(ss.hlsDir, "stream.m3u8")
-
+	// ffmpeg: JPEG stdin → H.264 MPEGTS stdout
 	ss.ffmpeg = exec.Command("ffmpeg",
 		"-y",
 		"-f", "image2pipe",
-		"-framerate", "24",
+		"-framerate", "30",
 		"-vcodec", "mjpeg",
 		"-i", "pipe:0",
-		"-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+		"-vf", "scale=1280:720,setsar=1:1",
 		"-vcodec", "libx264",
 		"-preset", "ultrafast",
 		"-tune", "zerolatency",
-		"-b:v", "3000k",
-		"-maxrate", "3000k",
-		"-bufsize", "1500k",
-		"-g", "24",
+		"-profile:v", "baseline",
+		"-level", "3.1",
+		"-b:v", "2000k",
+		"-maxrate", "2000k",
+		"-bufsize", "500k",
+		"-g", "10",
+		"-keyint_min", "10",
+		"-sc_threshold", "0",
+		"-flags", "+low_delay",
+		"-fflags", "+nobuffer",
 		"-pix_fmt", "yuv420p",
-		"-f", "hls",
-		"-hls_time", "1",
-		"-hls_list_size", "5",
-		"-hls_flags", "delete_segments+independent_segments",
-		"-hls_segment_filename", filepath.Join(ss.hlsDir, "stream%d.ts"),
-		playlistPath,
+		"-color_range", "tv",
+		"-f", "mpegts",
+		"-mpegts_flags", "resend_headers",
+		"pipe:1",
 	)
 
 	var err error
@@ -79,14 +79,41 @@ func (ss *SceneStream) startFFmpeg() error {
 		return fmt.Errorf("stdin pipe: %w", err)
 	}
 
-	ss.ffmpeg.Stderr = os.Stderr
+	stdout, err := ss.ffmpeg.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
 
 	if err := ss.ffmpeg.Start(); err != nil {
 		return fmt.Errorf("ffmpeg start: %w", err)
 	}
 
 	ss.started = true
-	log.Printf("scene stream: ffmpeg started (pid %d)", ss.ffmpeg.Process.Pid)
+	log.Printf("scene stream: ffmpeg started (pid %d), output to viewers", ss.ffmpeg.Process.Pid)
+
+	// Read ffmpeg output and distribute to viewers
+	go func() {
+		buf := make([]byte, 65536)
+		for {
+			n, err := stdout.Read(buf)
+			if err != nil {
+				break
+			}
+			if n > 0 {
+				chunk := make([]byte, n)
+				copy(chunk, buf[:n])
+
+				ss.outMu.RLock()
+				for ch := range ss.viewers {
+					select {
+					case ch <- chunk:
+					default: // viewer too slow, skip
+					}
+				}
+				ss.outMu.RUnlock()
+			}
+		}
+	}()
 
 	go func() {
 		err := ss.ffmpeg.Wait()
@@ -102,7 +129,6 @@ func (ss *SceneStream) startFFmpeg() error {
 	return nil
 }
 
-// FeedFrame sends a JPEG frame. Starts ffmpeg on the first frame.
 func (ss *SceneStream) FeedFrame(jpeg []byte) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
@@ -111,14 +137,13 @@ func (ss *SceneStream) FeedFrame(jpeg []byte) {
 		return
 	}
 
-	// Start ffmpeg lazily on first frame
 	if !ss.started {
 		if ss.failCount >= 3 {
 			return
 		}
 		if err := ss.startFFmpeg(); err != nil {
 			ss.failCount++
-			log.Printf("scene stream: failed to start ffmpeg (attempt %d/3): %v", ss.failCount, err)
+			log.Printf("scene stream: start attempt %d/3 failed: %v", ss.failCount, err)
 			return
 		}
 		ss.failCount = 0
@@ -130,21 +155,16 @@ func (ss *SceneStream) FeedFrame(jpeg []byte) {
 
 	_, err := ss.ffmpegStdin.Write(jpeg)
 	if err != nil {
-		log.Printf("scene stream: write error, ffmpeg likely crashed")
-		// Don't restart here — let the Wait() goroutine clean up
-		// Next Enable() call will allow restart
+		log.Printf("scene stream: write error")
 		return
 	}
 
 	ss.frameCount++
 	if ss.frameCount == 1 {
-		log.Printf("scene stream: first frame received (%d bytes), pipeline active", len(jpeg))
-		// Debug: save first frame to disk
-		os.WriteFile("/tmp/screening-frame-0.jpg", jpeg, 0644)
-		log.Printf("scene stream: saved debug frame to /tmp/screening-frame-0.jpg")
+		log.Printf("scene stream: first frame (%d bytes)", len(jpeg))
 	}
-	if ss.frameCount%100 == 0 {
-		log.Printf("scene stream: %d frames piped to ffmpeg", ss.frameCount)
+	if ss.frameCount%200 == 0 {
+		log.Printf("scene stream: %d frames piped", ss.frameCount)
 	}
 }
 
@@ -161,7 +181,6 @@ func (ss *SceneStream) Stop() {
 	ss.started = false
 	ss.ffmpegStdin = nil
 	ss.frameCount = 0
-	log.Printf("scene stream: stopped")
 }
 
 func (ss *SceneStream) IsActive() bool {
@@ -171,9 +190,45 @@ func (ss *SceneStream) IsActive() bool {
 }
 
 func (ss *SceneStream) StreamURL() string {
-	return fmt.Sprintf("http://%s:%d/scene/hls/stream.m3u8", ss.localIP, ss.serverPort)
+	return fmt.Sprintf("http://%s:%d/scene/live", ss.localIP, ss.serverPort)
 }
 
-func (ss *SceneStream) HLSDir() string {
-	return ss.hlsDir
+// ServeHTTP streams live MPEGTS to the requesting client
+func (ss *SceneStream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := make(chan []byte, 5) // small buffer for low latency
+	ss.outMu.Lock()
+	ss.viewers[ch] = true
+	ss.outMu.Unlock()
+
+	defer func() {
+		ss.outMu.Lock()
+		delete(ss.viewers, ch)
+		ss.outMu.Unlock()
+	}()
+
+	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Transfer-Encoding", "chunked")
+
+	log.Printf("scene stream: viewer connected from %s", r.RemoteAddr)
+
+	for {
+		select {
+		case chunk := <-ch:
+			_, err := w.Write(chunk)
+			if err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }

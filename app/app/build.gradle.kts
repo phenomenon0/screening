@@ -76,5 +76,6 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
+    implementation(libs.media3.hls)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

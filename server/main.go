@@ -99,12 +99,7 @@ func main() {
 	frameStream := NewFrameStream()
 	sceneStream := NewSceneStream(localIP, cfg.Port)
 	mux.HandleFunc("/ws", handleWebSocket(hub, frameStream, sceneStream))
-	mux.Handle("/scene/hls/", http.StripPrefix("/scene/hls/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Serve HLS segments with no-cache headers
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		http.FileServer(http.Dir(sceneStream.HLSDir())).ServeHTTP(w, r)
-	})))
+	mux.Handle("/scene/live", sceneStream)
 	mux.Handle("/scene/stream", frameStream)
 	mux.HandleFunc("/scene/frame", frameStream.LatestFrame)
 	mux.HandleFunc("/upload", handleUpload(cfg.ImagesDir, cfg.VideosDir, cfg.MusicDir, assetsDir))

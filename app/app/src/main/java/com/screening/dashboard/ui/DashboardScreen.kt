@@ -93,7 +93,8 @@ fun DashboardScreen(
             focusRequester.requestFocus()
         }
 
-        val totalFrames = if (hasVideos) AUTO_FRAME_COUNT + 1 else AUTO_FRAME_COUNT
+        // Videos (frame 4) and Scene (frame 5) are both manual-only
+        val totalFrames = FRAME_SCENE + 1 // always 6 — all frames accessible manually
 
         Column(
             modifier = Modifier
@@ -106,7 +107,7 @@ fun DashboardScreen(
                     when (event.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             var next = (activeFrame - 1 + totalFrames) % totalFrames
-                            // Skip video frame if no videos
+                            // Skip empty video frame on manual nav
                             if (next == FRAME_VIDEOS && !hasVideos) {
                                 next = (next - 1 + totalFrames) % totalFrames
                             }
