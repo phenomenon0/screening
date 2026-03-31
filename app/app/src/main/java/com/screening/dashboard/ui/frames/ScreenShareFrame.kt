@@ -39,7 +39,7 @@ fun ScreenShareFrame(
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
 
     LaunchedEffect(streamUrl) { exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl)); exoPlayer.prepare(); exoPlayer.playWhenReady = true }
-    LaunchedEffect(Unit) { delay(3000); showHint = true; delay(5000); showHint = false }
+    LaunchedEffect(streamUrl) { delay(3000); showHint = true; delay(5000); showHint = false }
     DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 

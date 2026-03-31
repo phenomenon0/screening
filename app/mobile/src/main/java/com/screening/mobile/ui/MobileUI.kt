@@ -40,7 +40,8 @@ fun MobileUI(
     serverBaseUrl: String
 ) {
     var currentTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Remote", "Todos", "Habits", "Timer", "3D")
+    val tabs = listOf("Remote", "Todos", "Habits", "Timer")
+    val tabIcons = listOf("📺", "✅", "🔥", "⏱")
 
     Column(
         modifier = Modifier
@@ -78,7 +79,6 @@ fun MobileUI(
                 1 -> TodosTab(state, repo)
                 2 -> HabitsTab(state, repo)
                 3 -> TimerTab(state, repo)
-                4 -> SceneControllerTab(state, repo)
             }
         }
 
@@ -91,7 +91,6 @@ fun MobileUI(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             tabs.forEachIndexed { i, label ->
-                val icons = listOf("📺", "✅", "🔥", "⏱", "🌐")
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -99,7 +98,7 @@ fun MobileUI(
                         .clickable { currentTab = i }
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Text(icons[i], fontSize = 20.sp)
+                    Text(tabIcons[i], fontSize = 20.sp)
                     Text(
                         label,
                         style = MobileType.label.copy(
@@ -157,7 +156,7 @@ fun RemoteTab(state: DashboardState, repo: DashboardRepository) {
         Spacer(Modifier.height(16.dp))
 
         // Frame buttons
-        val frames = listOf("📷 Images" to 0, "✅ Todos" to 1, "🔥 Habits" to 2, "📅 Calendar" to 3, "🎬 Video" to 4)
+        val frames = listOf("📷 Gallery" to 0, "✅ Todos" to 1, "🔥 Habits" to 2, "📅 Calendar" to 3, "🎬 Video" to 4)
         frames.chunked(3).forEach { row ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

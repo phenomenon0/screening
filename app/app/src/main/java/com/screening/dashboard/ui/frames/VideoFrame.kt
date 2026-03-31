@@ -86,7 +86,10 @@ fun VideoFrame(
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 currentIndex = exoPlayer.currentMediaItemIndex
-                selectedPlaylistIndex = exoPlayer.currentMediaItemIndex
+                // Only sync selection if playlist isn't actively being browsed
+                if (controlState != ControlState.PLAYLIST) {
+                    selectedPlaylistIndex = exoPlayer.currentMediaItemIndex
+                }
                 errorMessage = null
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -111,8 +114,10 @@ fun VideoFrame(
         exoPlayer.playWhenReady = true
     }
 
-    LaunchedEffect(isPlaying) {
-        while (isPlaying) { positionMs = exoPlayer.currentPosition; durationMs = exoPlayer.duration.coerceAtLeast(1); delay(500) }
+    LaunchedEffect(isPlaying, controlState) {
+        while (isPlaying && controlState != ControlState.HIDDEN) {
+            positionMs = exoPlayer.currentPosition; durationMs = exoPlayer.duration.coerceAtLeast(1); delay(500)
+        }
     }
 
     LaunchedEffect(controlState) {
@@ -129,6 +134,12 @@ fun VideoFrame(
             .focusRequester(focusRequester).focusable()
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
+                // Media keys work in all states
+                when (event.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD, KeyEvent.KEYCODE_CHANNEL_UP -> { if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem(); return@onKeyEvent true }
+                    KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD, KeyEvent.KEYCODE_CHANNEL_DOWN -> { if (exoPlayer.hasPreviousMediaItem()) exoPlayer.seekToPreviousMediaItem(); return@onKeyEvent true }
+                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play(); return@onKeyEvent true }
+                }
                 if (errorMessage != null) {
                     when (event.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { errorMessage = null; exoPlayer.prepare(); exoPlayer.play(); true }
@@ -142,19 +153,14 @@ fun VideoFrame(
                         KeyEvent.KEYCODE_DPAD_RIGHT -> { onNavigateRight(); true }
                         KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { onBack(); true }
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { controlState = ControlState.SHOWN; true }
-                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play(); true }
-                        KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD, KeyEvent.KEYCODE_CHANNEL_UP -> { if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem(); true }
-                        KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD, KeyEvent.KEYCODE_CHANNEL_DOWN -> { if (exoPlayer.hasPreviousMediaItem()) exoPlayer.seekToPreviousMediaItem(); true }
                         else -> { controlState = ControlState.SHOWN; true }
                     }
                     ControlState.SHOWN -> when (event.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play(); true }
+                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play(); true }
                         KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> { exoPlayer.seekBack(); true }
                         KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { exoPlayer.seekForward(); true }
                         KeyEvent.KEYCODE_DPAD_UP -> { selectedPlaylistIndex = currentIndex; controlState = ControlState.PLAYLIST; true }
                         KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { controlState = ControlState.HIDDEN; true }
-                        KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD, KeyEvent.KEYCODE_CHANNEL_UP -> { if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem(); true }
-                        KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD, KeyEvent.KEYCODE_CHANNEL_DOWN -> { if (exoPlayer.hasPreviousMediaItem()) exoPlayer.seekToPreviousMediaItem(); true }
                         else -> true
                     }
                     ControlState.PLAYLIST -> when (event.nativeKeyEvent.keyCode) {
