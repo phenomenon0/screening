@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.screening.dashboard.ui.theme.*
 import kotlinx.coroutines.delay
@@ -25,7 +26,7 @@ fun StatusBar(
 
     LaunchedEffect(Unit) {
         while (true) {
-            timeStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm a"))
+            timeStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm"))
             delay(30_000)
         }
     }
@@ -33,40 +34,51 @@ fun StatusBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 48.dp, vertical = 16.dp),
+            .padding(start = 24.dp, end = 48.dp, top = 16.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f, fill = false)
-        ) {
+        // Left: app name + connection
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "TV Dashboard",
+                style = DashboardTypography.titleMedium.copy(color = OnSurface)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
             Box(
                 modifier = Modifier
-                    .size(8.dp)
+                    .size(6.dp)
                     .clip(CircleShape)
-                    .background(if (connected) AccentGreen else AccentRed)
+                    .background(if (connected) TertiaryContainer else AccentRed)
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (connected) "Connected" else "Disconnected",
-                style = DashboardTypography.labelSmall
-            )
+        }
 
-            if (nowPlaying != null) {
-                Spacer(modifier = Modifier.width(24.dp))
+        // Center: now playing
+        if (nowPlaying != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(PrimaryContainer)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "\u266A ${nowPlaying.substringBeforeLast(".")}",
-                    style = DashboardTypography.labelSmall.copy(color = AccentCyan),
+                    text = "Now Playing: ${nowPlaying.substringBeforeLast(".")}",
+                    style = DashboardTypography.labelMedium.copy(color = OnSurfaceVariant),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
 
+        // Right: clock
         Text(
             text = timeStr,
-            style = DashboardTypography.bodyMedium.copy(color = TextSecondary)
+            style = DashboardTypography.headlineMedium.copy(
+                color = PrimaryContainer,
+                fontSize = 28.sp
+            )
         )
     }
 }

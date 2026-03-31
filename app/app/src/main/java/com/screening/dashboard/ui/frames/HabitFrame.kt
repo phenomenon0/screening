@@ -2,7 +2,6 @@ package com.screening.dashboard.ui.frames
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,8 +17,6 @@ import androidx.tv.material3.Text
 import com.screening.shared.model.HabitInfo
 import com.screening.dashboard.ui.theme.*
 import java.time.LocalDate
-import java.time.format.TextStyle
-import java.util.Locale
 
 @Composable
 fun HabitFrame(
@@ -27,23 +24,39 @@ fun HabitFrame(
     modifier: Modifier = Modifier
 ) {
     if (habits.isEmpty()) {
-        Box(
-            modifier = modifier.fillMaxSize().background(DarkBackground),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("No habits yet", style = DashboardTypography.titleLarge.copy(color = TextDim))
+        Box(modifier = modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+            Text("No habits yet", style = DashboardTypography.titleLarge.copy(color = Outline))
         }
         return
     }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(48.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+    Column(
+        modifier = modifier.fillMaxSize().padding(start = 24.dp, end = 48.dp, top = 8.dp, bottom = 24.dp)
     ) {
-        items(habits, key = { it.id }) { habit ->
-            HabitCard(habit)
+        // Header
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text(text = "Habits", style = DashboardTypography.headlineLarge)
+            Spacer(modifier = Modifier.width(16.dp))
+            val activeCount = habits.count { it.doneToday }
+            val completionPct = if (habits.isNotEmpty()) (activeCount * 100 / habits.size) else 0
+            Text(
+                text = "${habits.size} Active \u2022 ${completionPct}% Completion Today",
+                style = DashboardTypography.bodyMedium.copy(color = Outline)
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 2x2 grid
+        val rows = habits.chunked(2)
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            rows.take(2).forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    row.forEach { habit ->
+                        Box(modifier = Modifier.weight(1f)) { HabitCard(habit) }
+                    }
+                    if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -51,150 +64,92 @@ fun HabitFrame(
 @Composable
 private fun HabitCard(habit: HabitInfo) {
     val historySet = remember(habit.history) { habit.history.toSet() }
+    val streakColor = when {
+        habit.streak >= 30 -> PrimaryContainer
+        habit.streak >= 7 -> TertiaryContainer
+        habit.streak > 0 -> Amber
+        else -> Outline
+    }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(DarkCard)
-            .padding(24.dp)
+            .background(SurfaceContainerHigh)
+            .padding(20.dp)
     ) {
-        // Header: name + streak
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = habit.name,
-                    style = DashboardTypography.headlineMedium
-                )
-                Text(
-                    text = "${habit.totalDone} total completions",
-                    style = DashboardTypography.bodyMedium.copy(color = TextDim)
-                )
-            }
-
-            // Streak badge
+        // Top: name + streak
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Text(text = habit.name, style = DashboardTypography.titleLarge, modifier = Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (habit.streak > 0) {
-                    Text(
-                        text = "\uD83D\uDD25",  // fire emoji
-                        fontSize = 32.sp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${habit.streak}",
-                        style = DashboardTypography.headlineLarge.copy(
-                            color = when {
-                                habit.streak >= 30 -> AccentCyan
-                                habit.streak >= 7 -> AccentGreen
-                                habit.streak > 0 -> AccentAmber
-                                else -> TextDim
-                            },
-                            fontSize = 48.sp
-                        )
-                    )
-                    Text(
-                        text = "day streak",
-                        style = DashboardTypography.labelSmall
-                    )
-                    if (habit.bestStreak > habit.streak) {
-                        Text(
-                            text = "best: ${habit.bestStreak}",
-                            style = DashboardTypography.labelSmall.copy(color = TextDim)
-                        )
-                    }
-                }
+                if (habit.streak > 0) Text(text = "\uD83D\uDD25", fontSize = 20.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "${habit.streak}", style = DashboardTypography.headlineMedium.copy(color = streakColor))
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Heatmap: last 12 weeks (84 days)
-        HeatmapGrid(historySet = historySet, doneToday = habit.doneToday)
-
-        // Status
-        if (habit.doneToday) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Done today",
-                style = DashboardTypography.bodyMedium.copy(color = AccentGreen)
-            )
+        // Status badge
+        val (badgeText, badgeColor) = when {
+            habit.doneToday -> "DONE TODAY" to TertiaryContainer
+            else -> "PENDING" to Amber
         }
+        Box(
+            modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                .background(badgeColor.copy(alpha = 0.2f))
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            Text(text = badgeText, style = DashboardTypography.labelSmall.copy(color = badgeColor))
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "Total: ${habit.totalDone}", style = DashboardTypography.bodySmall)
+        Text(text = "Best Streak: ${habit.bestStreak}", style = DashboardTypography.bodySmall)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Mini heatmap
+        MiniHeatmap(historySet = historySet, doneToday = habit.doneToday)
     }
 }
 
 @Composable
-private fun HeatmapGrid(historySet: Set<String>, doneToday: Boolean) {
+private fun MiniHeatmap(historySet: Set<String>, doneToday: Boolean) {
     val today = remember { LocalDate.now() }
-    val weeks = 12
+    val weeks = 8
     val days = weeks * 7
 
-    // Build grid: 7 rows (Mon-Sun) x 12 columns (weeks)
     val grid = remember(historySet, today) {
         val startDate = today.minusDays((days - 1).toLong())
         (0 until days).map { offset ->
             val date = startDate.plusDays(offset.toLong())
-            val dateStr = date.toString() // YYYY-MM-DD
-            val done = historySet.contains(dateStr) || (date == today && doneToday)
-            Triple(date, dateStr, done)
+            val done = historySet.contains(date.toString()) || (date == today && doneToday)
+            date to done
         }
     }
 
-    Column {
-        // Week day labels
-        Row {
-            Spacer(modifier = Modifier.width(0.dp))
-            // 7 rows for each day of week
-        }
-
-        // Grid
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            items(weeks) { week ->
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    repeat(7) { dayOfWeek ->
-                        val idx = week * 7 + dayOfWeek
-                        if (idx < grid.size) {
-                            val (date, _, done) = grid[idx]
-                            val isToday = date == today
-                            val color = when {
-                                done && isToday -> AccentCyan
-                                done -> AccentGreen
-                                isToday -> DarkSurface
-                                else -> Color(0xFF1A1A1A)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(14.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(color)
-                            )
-                        }
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        repeat(weeks) { week ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                repeat(7) { dayOfWeek ->
+                    val idx = week * 7 + dayOfWeek
+                    if (idx < grid.size) {
+                        val (date, done) = grid[idx]
+                        val isToday = date == today
+                        Box(
+                            modifier = Modifier.size(10.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(
+                                    when {
+                                        done && isToday -> PrimaryContainer
+                                        done -> TertiaryContainer
+                                        isToday -> SurfaceContainerHighest
+                                        else -> SurfaceContainer
+                                    }
+                                )
+                        )
                     }
                 }
-            }
-        }
-
-        // Month labels
-        Spacer(modifier = Modifier.height(4.dp))
-        val months = remember(today) {
-            val startDate = today.minusDays((days - 1).toLong())
-            (0 until weeks).mapNotNull { week ->
-                val date = startDate.plusDays((week * 7).toLong())
-                if (date.dayOfMonth <= 7) {
-                    date.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())
-                } else null
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            months.forEach { month ->
-                Text(text = month, style = DashboardTypography.labelSmall)
             }
         }
     }

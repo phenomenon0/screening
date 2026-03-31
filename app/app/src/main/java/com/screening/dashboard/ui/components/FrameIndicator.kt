@@ -8,8 +8,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.screening.dashboard.ui.theme.AccentCyan
-import com.screening.dashboard.ui.theme.TextDim
+import com.screening.dashboard.ui.theme.PrimaryContainer
+import com.screening.dashboard.ui.theme.OutlineVariant
 
 @Composable
 fun FrameIndicator(
@@ -27,11 +27,9 @@ fun FrameIndicator(
                 modifier = Modifier
                     .size(if (index == current) 10.dp else 6.dp)
                     .clip(CircleShape)
-                    .background(if (index == current) AccentCyan else TextDim)
+                    .background(if (index == current) PrimaryContainer else OutlineVariant)
             )
-            if (index < count - 1) {
-                Spacer(modifier = Modifier.width(8.dp))
-            }
+            if (index < count - 1) Spacer(modifier = Modifier.width(6.dp))
         }
     }
 }

@@ -25,3 +25,4 @@ Thumbs.db
 # Gradle
 .gradle/
 build/
+server/screening-server

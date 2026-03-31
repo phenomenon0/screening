@@ -40,12 +40,6 @@ class MainActivity : ComponentActivity() {
             } else {
                 val state by app.repository.state.collectAsState()
 
-                LaunchedEffect(state.music) {
-                    if (state.music.isNotEmpty()) {
-                        MusicService.start(this@MainActivity, app.serverBaseUrl, state.music)
-                    }
-                }
-
                 DashboardScreen(
                     state = state.copy(serverBaseUrl = app.serverBaseUrl),
                     imageLoader = app.imageLoader,
