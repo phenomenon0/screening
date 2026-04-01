@@ -84,9 +84,22 @@ func main() {
 	scenes := NewSceneManager(scenesDir)
 	scenes.CreateDefault()
 
-	hub = NewHub(calendar, todos, images, videos, music, screen, pomodoro, habits)
+	weather := NewWeatherSource(func() { hub.BroadcastWeather() })
+
+	hub = NewHub(calendar, todos, images, videos, music, screen, pomodoro, habits, weather)
+
+	// Wire alarm callback — broadcast to all clients
+	calendar.onAlarm = func(a AlarmInfo) {
+		hub.Broadcast(ServerMessage{
+			Type:    "alarm",
+			URL:     a.EventTitle,
+			SceneID: a.EventStart.Format("15:04"),
+		})
+	}
 
 	go calendar.Watch(done)
+	go calendar.StartAlarmChecker(done)
+	go weather.StartPolling(done)
 	go todos.Watch(done)
 	go images.Watch(done)
 	go videos.Watch(done)

@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.screening.shared.model.CalendarEvent
 import com.screening.dashboard.ui.theme.*
@@ -25,21 +24,25 @@ import java.util.Locale
 @Composable
 fun CalendarFrame(events: List<CalendarEvent>, modifier: Modifier = Modifier) {
     val today = remember { LocalDate.now() }
+
     val todayEvents = remember(events) {
         events.filter { ev ->
             try { OffsetDateTime.parse(ev.start).toLocalDate() == today } catch (_: Exception) { false }
         }.sortedBy { it.start }
     }
-    val weekEvents = remember(events) {
+
+    // Upcoming = tomorrow through 7 days out (exclude today)
+    val upcomingEvents = remember(events) {
+        val tomorrow = today.plusDays(1)
         val weekEnd = today.plusDays(7)
         events.filter { ev ->
-            try { val d = OffsetDateTime.parse(ev.start).toLocalDate(); d in today..weekEnd } catch (_: Exception) { false }
+            try { val d = OffsetDateTime.parse(ev.start).toLocalDate(); d in tomorrow..weekEnd } catch (_: Exception) { false }
         }.sortedBy { it.start }
     }
 
     Row(modifier = modifier.fillMaxSize().padding(start = 24.dp, end = 48.dp, top = 8.dp, bottom = 24.dp)) {
         // Left: Today
-        Column(modifier = Modifier.weight(1.2f).fillMaxHeight()) {
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Text(
                 text = today.dayOfWeek.getDisplayName(JavaTextStyle.FULL, Locale.getDefault()),
                 style = DashboardTypography.displayLarge
@@ -51,12 +54,10 @@ fun CalendarFrame(events: List<CalendarEvent>, modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(24.dp))
 
             if (todayEvents.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = "No events today", style = DashboardTypography.titleLarge.copy(color = Outline))
-                }
+                Text(text = "No events today", style = DashboardTypography.bodyLarge.copy(color = Outline))
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(todayEvents) { event -> EventCard(event) }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(todayEvents) { event -> TodayEventCard(event) }
                 }
             }
         }
@@ -64,45 +65,45 @@ fun CalendarFrame(events: List<CalendarEvent>, modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.width(32.dp))
 
         // Right: Upcoming Week
-        Column(modifier = Modifier.weight(0.8f).fillMaxHeight()) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "Upcoming Week", style = DashboardTypography.titleLarge)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            Text(text = "Upcoming Week", style = DashboardTypography.titleLarge)
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Group by day
-            val grouped = remember(weekEvents) {
-                weekEvents.groupBy {
-                    try { OffsetDateTime.parse(it.start).toLocalDate() } catch (_: Exception) { today }
-                }.toSortedMap()
-            }
+            if (upcomingEvents.isEmpty()) {
+                Text(text = "Nothing scheduled", style = DashboardTypography.bodyLarge.copy(color = Outline))
+            } else {
+                val grouped = remember(upcomingEvents) {
+                    upcomingEvents.groupBy {
+                        try { OffsetDateTime.parse(it.start).toLocalDate() } catch (_: Exception) { today }
+                    }.toSortedMap()
+                }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                grouped.forEach { (date, dayEvents) ->
-                    item {
-                        val dayName = date.dayOfWeek.getDisplayName(JavaTextStyle.SHORT, Locale.getDefault())
-                        val dayNum = date.dayOfMonth
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(text = "$dayName $dayNum", style = DashboardTypography.titleMedium.copy(color = OnSurface))
-                            Text(text = "${dayEvents.size} Event${if (dayEvents.size > 1) "s" else ""}", style = DashboardTypography.bodySmall)
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    grouped.forEach { (date, dayEvents) ->
+                        item {
+                            val dayName = date.dayOfWeek.getDisplayName(JavaTextStyle.SHORT, Locale.getDefault())
+                            val dayNum = date.dayOfMonth
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = "$dayName $dayNum", style = DashboardTypography.titleMedium.copy(color = OnSurface))
+                                Text(text = "${dayEvents.size}", style = DashboardTypography.labelMedium.copy(color = Outline))
+                            }
                         }
-                    }
-                    items(dayEvents) { event ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceContainer)
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.width(3.dp).height(32.dp).clip(RoundedCornerShape(2.dp)).background(PrimaryContainer))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(text = event.title, style = DashboardTypography.bodyMedium.copy(color = OnSurface), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                val timeStr = if (event.allDay) "All Day" else try {
-                                    OffsetDateTime.parse(event.start).format(DateTimeFormatter.ofPattern("h:mm a"))
+                        items(dayEvents) { event ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(modifier = Modifier.width(3.dp).height(20.dp).clip(RoundedCornerShape(2.dp)).background(PrimaryContainer))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                val time = try {
+                                    if (event.allDay) "All Day"
+                                    else OffsetDateTime.parse(event.start).format(DateTimeFormatter.ofPattern("h:mm a"))
                                 } catch (_: Exception) { "" }
-                                Text(text = timeStr, style = DashboardTypography.bodySmall.copy(color = PrimaryContainer))
+                                Text(text = time, style = DashboardTypography.labelMedium.copy(color = PrimaryContainer), modifier = Modifier.width(64.dp))
+                                Text(text = event.title, style = DashboardTypography.bodyMedium.copy(color = OnSurface), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -113,7 +114,7 @@ fun CalendarFrame(events: List<CalendarEvent>, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun EventCard(event: CalendarEvent) {
+private fun TodayEventCard(event: CalendarEvent) {
     val timeStr = remember(event.start, event.end) {
         if (event.allDay) "ALL DAY"
         else try {
@@ -127,9 +128,8 @@ private fun EventCard(event: CalendarEvent) {
         modifier = Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(SurfaceContainerHigh)
-            .padding(20.dp)
+            .padding(16.dp)
     ) {
-        // Time badge
         Box(
             modifier = Modifier.clip(RoundedCornerShape(4.dp))
                 .background(PrimaryContainer.copy(alpha = 0.15f))
@@ -137,7 +137,7 @@ private fun EventCard(event: CalendarEvent) {
         ) {
             Text(text = timeStr, style = DashboardTypography.labelMedium.copy(color = PrimaryContainer))
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = event.title, style = DashboardTypography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(text = event.title, style = DashboardTypography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

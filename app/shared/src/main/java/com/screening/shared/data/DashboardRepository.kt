@@ -34,6 +34,12 @@ class DashboardRepository(private val wsClient: WebSocketClient) {
                         "screen_share_active" -> current.copy(screenShareUrl = msg.url)
                         "screen_share_stop" -> current.copy(screenShareUrl = null)
                         "frame_change" -> current.copy(forceFrame = msg.frame)
+                        "alarm" -> current.copy(alarmTitle = msg.url, alarmTime = msg.target)
+                        "weather_sync" -> {
+                            val w = msg.weather
+                            if (w != null) current.copy(weatherEmoji = w.emoji, weatherTemp = "${w.tempF}\u00B0F")
+                            else current
+                        }
                         "ping" -> {
                             wsClient.send(ClientMessage(type = "pong"))
                             current

@@ -71,7 +71,7 @@ fun TodoFrame(
             }
             Text(text = "PRIORITY VIEW", style = DashboardTypography.labelLarge.copy(color = Outline))
         }
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         if (items.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -94,7 +94,7 @@ fun TodoFrame(
                             modifier = Modifier.fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(if (isSelected) SurfaceContainerHigh else SurfaceContainer.copy(alpha = 0.4f))
-                                .padding(horizontal = 20.dp, vertical = 16.dp),
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Circle indicator
@@ -114,7 +114,7 @@ fun TodoFrame(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = item.text,
-                                    style = DashboardTypography.titleMedium.copy(
+                                    style = DashboardTypography.bodyLarge.copy(
                                         color = if (item.done) Outline else OnSurface,
                                         textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None
                                     ),

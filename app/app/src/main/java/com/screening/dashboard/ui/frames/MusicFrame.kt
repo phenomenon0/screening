@@ -58,11 +58,26 @@ fun MusicFrame(
         }
     }
 
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
     var isPlaying by remember { mutableStateOf(false) }
     var currentIndex by remember { mutableIntStateOf(0) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(1L) }
     var showControls by remember { mutableStateOf(true) }
+
+    // Pause on TV power off
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> exoPlayer.pause()
+                androidx.lifecycle.Lifecycle.Event.ON_DESTROY -> exoPlayer.release()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -72,7 +87,7 @@ fun MusicFrame(
             }
         }
         exoPlayer.addListener(listener)
-        onDispose { exoPlayer.removeListener(listener); exoPlayer.release() }
+        onDispose { exoPlayer.removeListener(listener); exoPlayer.stop(); exoPlayer.release() }
     }
 
     LaunchedEffect(tracks, serverBaseUrl) {

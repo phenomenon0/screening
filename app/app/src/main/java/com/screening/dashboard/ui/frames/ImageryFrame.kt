@@ -58,24 +58,10 @@ fun ImageryFrame(
         Box(modifier = Modifier.fillMaxWidth().height(120.dp).align(Alignment.TopCenter)
             .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent))))
 
-        // Bottom gradient + photo info overlay
-        Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
-            .padding(start = 24.dp, end = 48.dp, bottom = 48.dp, top = 64.dp)
-        ) {
-            Column {
-                Text(
-                    text = cleanImageName(currentImage.filename),
-                    style = DashboardTypography.headlineLarge
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (currentImage.width > 0) {
-                        Text(text = "${currentImage.width}x${currentImage.height}", style = DashboardTypography.labelMedium.copy(color = OnSurfaceVariant))
-                    }
-                }
-            }
-        }
+        // Bottom gradient only — no text overlay
+        Box(modifier = Modifier.fillMaxWidth().height(80.dp).align(Alignment.BottomCenter)
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.3f))))
+        )
     }
 }
 

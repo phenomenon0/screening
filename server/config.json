@@ -1,6 +1,6 @@
 {
   "port": 9900,
-  "ics_path": "",
+  "ics_path": "~/.local/share/screening/calendar.ics",
   "images_dir": "~/Pictures/Dashboard",
   "videos_dir": "~/Videos/Dashboard",
   "music_dir": "~/Music/Dashboard",

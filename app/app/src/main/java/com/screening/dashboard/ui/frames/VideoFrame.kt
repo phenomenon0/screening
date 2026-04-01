@@ -68,11 +68,26 @@ fun VideoFrame(
     }
 
     val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val focusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ALL }
+    }
+
+    // Pause on lifecycle stop (TV power off), resume on start
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> exoPlayer.pause()
+                androidx.lifecycle.Lifecycle.Event.ON_START -> {} // user resumes manually
+                androidx.lifecycle.Lifecycle.Event.ON_DESTROY -> exoPlayer.release()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     var isPlaying by remember { mutableStateOf(false) }
@@ -128,7 +143,7 @@ fun VideoFrame(
             }
         }
         exoPlayer.addListener(listener)
-        onDispose { exoPlayer.removeListener(listener); exoPlayer.release() }
+        onDispose { exoPlayer.removeListener(listener); exoPlayer.stop(); exoPlayer.release() }
     }
 
     LaunchedEffect(videos, serverBaseUrl) {

@@ -11,12 +11,21 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+type AlarmInfo struct {
+	EventTitle string    `json:"event_title"`
+	EventStart time.Time `json:"event_start"`
+	AlarmAt    time.Time `json:"alarm_at"`
+	Fired      bool
+}
+
 // CalendarSource watches an ICS file and provides parsed events.
 type CalendarSource struct {
-	mu     sync.RWMutex
-	events []Event
-	path   string
+	mu      sync.RWMutex
+	events  []Event
+	alarms  []AlarmInfo
+	path    string
 	onChange func()
+	onAlarm func(AlarmInfo)
 }
 
 func NewCalendarSource(path string, onChange func()) *CalendarSource {
@@ -48,6 +57,7 @@ func (cs *CalendarSource) reload() {
 
 	dec := ical.NewDecoder(f)
 	var events []Event
+	var alarms []AlarmInfo
 
 	for {
 		cal, err := dec.Decode()
@@ -79,6 +89,24 @@ func (cs *CalendarSource) reload() {
 				}
 			}
 
+			// Parse VALARM children
+			for _, child := range comp.Children {
+				if child.Name == "VALARM" {
+					triggerProp := child.Props.Get("TRIGGER")
+					if triggerProp != nil && dtStart.After(time.Now().Add(-24*time.Hour)) {
+						dur := parseICALDuration(triggerProp.Value)
+						alarmTime := dtStart.Add(dur)
+						if alarmTime.After(time.Now()) {
+							alarms = append(alarms, AlarmInfo{
+								EventTitle: ev.Title,
+								EventStart: dtStart,
+								AlarmAt:    alarmTime,
+							})
+						}
+					}
+				}
+			}
+
 			ev.ID = fmt.Sprintf("%s-%s", ev.ID, ev.Start)
 			events = append(events, ev)
 		}
@@ -86,8 +114,9 @@ func (cs *CalendarSource) reload() {
 
 	cs.mu.Lock()
 	cs.events = events
+	cs.alarms = alarms
 	cs.mu.Unlock()
-	log.Printf("calendar: loaded %d events from %s", len(events), cs.path)
+	log.Printf("calendar: loaded %d events, %d alarms from %s", len(events), len(alarms), cs.path)
 }
 
 func propVal(comp *ical.Component, name string) string {
@@ -96,6 +125,75 @@ func propVal(comp *ical.Component, name string) string {
 		return ""
 	}
 	return p.Value
+}
+
+// parseICALDuration parses "-PT5M" style durations
+func parseICALDuration(s string) time.Duration {
+	neg := false
+	if len(s) > 0 && s[0] == '-' {
+		neg = true
+		s = s[1:]
+	}
+	if len(s) > 0 && s[0] == 'P' {
+		s = s[1:]
+	}
+	if len(s) > 0 && s[0] == 'T' {
+		s = s[1:]
+	}
+	var d time.Duration
+	num := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			num = num*10 + int(c-'0')
+		} else {
+			switch c {
+			case 'H':
+				d += time.Duration(num) * time.Hour
+			case 'M':
+				d += time.Duration(num) * time.Minute
+			case 'S':
+				d += time.Duration(num) * time.Second
+			}
+			num = 0
+		}
+	}
+	if neg {
+		d = -d
+	}
+	return d
+}
+
+// StartAlarmChecker checks every 30 seconds for alarms to fire
+func (cs *CalendarSource) StartAlarmChecker(done <-chan struct{}) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			cs.checkAlarms()
+		}
+	}
+}
+
+func (cs *CalendarSource) checkAlarms() {
+	now := time.Now()
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	for i := range cs.alarms {
+		a := &cs.alarms[i]
+		if a.Fired {
+			continue
+		}
+		if now.After(a.AlarmAt) && now.Before(a.AlarmAt.Add(2*time.Minute)) {
+			a.Fired = true
+			log.Printf("alarm: firing for %q (starts %s)", a.EventTitle, a.EventStart.Format("15:04"))
+			if cs.onAlarm != nil {
+				cs.onAlarm(*a)
+			}
+		}
+	}
 }
 
 // Watch starts watching the ICS file for changes.

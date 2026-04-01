@@ -64,6 +64,7 @@ fun DashboardScreen(
         return
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     var activeFrame by remember { mutableIntStateOf(FRAME_IMAGES) }
     var showQR by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -73,6 +74,26 @@ fun DashboardScreen(
     LaunchedEffect(state.forceFrame) {
         state.forceFrame?.let { activeFrame = it.coerceIn(0, TOTAL_FRAMES - 1); onClearForceFrame() }
     }
+
+    // Alarm overlay
+    var showAlarm by remember { mutableStateOf(false) }
+    var alarmTitle by remember { mutableStateOf("") }
+    var alarmTime by remember { mutableStateOf("") }
+    val alarmPlayer = remember { android.media.MediaPlayer.create(context, com.screening.dashboard.R.raw.alarm_alert) }
+
+    LaunchedEffect(state.alarmTitle) {
+        if (state.alarmTitle != null) {
+            alarmTitle = state.alarmTitle!!
+            alarmTime = state.alarmTime ?: ""
+            showAlarm = true
+            try { alarmPlayer.start() } catch (_: Exception) {}
+            delay(20_000)
+            showAlarm = false
+            try { alarmPlayer.pause(); alarmPlayer.seekTo(0) } catch (_: Exception) {}
+        }
+    }
+
+    DisposableEffect(Unit) { onDispose { try { alarmPlayer.release() } catch (_: Exception) {} } }
 
     var autoScrollKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(autoScrollKey, activeFrame) {
@@ -115,10 +136,9 @@ fun DashboardScreen(
                 }
             }
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-                StatusBar(connected = state.connected, nowPlaying = state.music.firstOrNull()?.filename)
-
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+                // Content fills entire screen
+                Box(modifier = Modifier.fillMaxSize()) {
                     Crossfade(targetState = activeFrame, animationSpec = tween(800), label = "frame_crossfade") { index ->
                         when (index) {
                             FRAME_IMAGES -> ImageryFrame(images = state.images, serverBaseUrl = state.serverBaseUrl, imageLoader = imageLoader)
@@ -166,10 +186,37 @@ fun DashboardScreen(
                             }
                         }
                     }
+
+                    // Alarm overlay
+                    if (showAlarm) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().background(Background.copy(alpha = 0.85f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "\u23F0", style = DashboardTypography.displayLarge)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(text = alarmTitle, style = DashboardTypography.headlineLarge.copy(color = PrimaryContainer))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(text = "starts at $alarmTime", style = DashboardTypography.headlineMedium.copy(color = OnSurfaceVariant))
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(text = "5 minutes", style = DashboardTypography.titleLarge.copy(color = Amber))
+                            }
+                        }
+                    }
                 }
 
-                // Frame indicator
-            FrameIndicator(count = TOTAL_FRAMES, current = activeFrame, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp))
+                // StatusBar overlay (top)
+                StatusBar(
+                    connected = state.connected,
+                    nowPlaying = state.music.firstOrNull()?.filename,
+                    weatherEmoji = state.weatherEmoji,
+                    weatherTemp = state.weatherTemp,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+
+                // Frame indicator overlay (bottom)
+                FrameIndicator(count = TOTAL_FRAMES, current = activeFrame, modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 16.dp))
         }
     }
 }

@@ -16,17 +16,25 @@ import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+// Unified status bar font — Manrope SemiBold 18sp, legible from across the room
+private val statusFont = DashboardTypography.titleMedium.copy(
+    fontFamily = ManropeFamily,
+    fontSize = 14.sp
+)
+
 @Composable
 fun StatusBar(
     connected: Boolean,
     nowPlaying: String? = null,
+    weatherEmoji: String = "",
+    weatherTemp: String = "",
     modifier: Modifier = Modifier
 ) {
     var timeStr by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         while (true) {
-            timeStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm"))
+            timeStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("h:mm a"))
             delay(30_000)
         }
     }
@@ -34,51 +42,43 @@ fun StatusBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 24.dp, end = 48.dp, top = 16.dp, bottom = 12.dp),
+            .background(Background.copy(alpha = 0.7f))
+            .padding(horizontal = 48.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left: app name + connection
+        // Left: weather + connection
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "TV Dashboard",
-                style = DashboardTypography.titleMedium.copy(color = OnSurface)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
             Box(
                 modifier = Modifier
-                    .size(6.dp)
+                    .size(7.dp)
                     .clip(CircleShape)
                     .background(if (connected) TertiaryContainer else AccentRed)
             )
+            if (weatherEmoji.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "$weatherEmoji $weatherTemp",
+                    style = statusFont.copy(color = OnSurface)
+                )
+            }
         }
 
         // Center: now playing
         if (nowPlaying != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryContainer)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Now Playing: ${nowPlaying.substringBeforeLast(".")}",
-                    style = DashboardTypography.labelMedium.copy(color = OnSurfaceVariant),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = "\u266A ${nowPlaying.substringBeforeLast(".")}",
+                style = statusFont.copy(color = OnSurfaceVariant),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 300.dp)
+            )
         }
 
         // Right: clock
         Text(
             text = timeStr,
-            style = DashboardTypography.headlineMedium.copy(
-                color = PrimaryContainer,
-                fontSize = 28.sp
-            )
+            style = statusFont.copy(color = OnSurfaceVariant)
         )
     }
 }

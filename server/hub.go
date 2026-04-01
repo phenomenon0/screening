@@ -32,13 +32,14 @@ type Hub struct {
 	screen   *ScreenShare
 	pomodoro *Pomodoro
 	habits   *HabitStore
+	weather  *WeatherSource
 }
 
-func NewHub(cal *CalendarSource, todos *TodoSource, imgs *ImageSource, vids *VideoSource, mus *MusicSource, scr *ScreenShare, pomo *Pomodoro, hab *HabitStore) *Hub {
+func NewHub(cal *CalendarSource, todos *TodoSource, imgs *ImageSource, vids *VideoSource, mus *MusicSource, scr *ScreenShare, pomo *Pomodoro, hab *HabitStore, wea *WeatherSource) *Hub {
 	return &Hub{
 		clients:  make(map[*websocket.Conn]*ClientInfo),
 		calendar: cal, todos: todos, images: imgs, videos: vids,
-		music: mus, screen: scr, pomodoro: pomo, habits: hab,
+		music: mus, screen: scr, pomodoro: pomo, habits: hab, weather: wea,
 	}
 }
 
@@ -99,6 +100,12 @@ func (h *Hub) SendFullState(ctx context.Context, conn *websocket.Conn) error {
 		{Type: "habit_sync", Habits: h.habits.List()},
 		{Type: "pomodoro_sync", Pomodoro: &pomoState},
 		{Type: "devices_sync", Devices: h.Devices()},
+	}
+	if h.weather != nil {
+		w := h.weather.Current()
+		if w.TempF != "" {
+			msgs = append(msgs, ServerMessage{Type: "weather_sync", Weather: &w})
+		}
 	}
 	if h.screen.IsActive() {
 		msgs = append(msgs, ServerMessage{Type: "screen_share_active", URL: h.screen.streamURL()})
@@ -193,6 +200,14 @@ func (h *Hub) BroadcastDevices()  { h.Broadcast(ServerMessage{Type: "devices_syn
 func (h *Hub) BroadcastPomodoro() {
 	s := h.pomodoro.State()
 	h.Broadcast(ServerMessage{Type: "pomodoro_sync", Pomodoro: &s})
+}
+func (h *Hub) BroadcastWeather() {
+	if h.weather != nil {
+		w := h.weather.Current()
+		if w.TempF != "" {
+			h.Broadcast(ServerMessage{Type: "weather_sync", Weather: &w})
+		}
+	}
 }
 
 func (h *Hub) HandleScreenShare(start bool) {

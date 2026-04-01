@@ -40,7 +40,7 @@ fun ScreenShareFrame(
 
     LaunchedEffect(streamUrl) { exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl)); exoPlayer.prepare(); exoPlayer.playWhenReady = true }
     LaunchedEffect(streamUrl) { delay(3000); showHint = true; delay(5000); showHint = false }
-    DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
+    DisposableEffect(Unit) { onDispose { exoPlayer.stop(); exoPlayer.release() } }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     Box(

@@ -16,6 +16,7 @@ type ServerMessage struct {
 	Devices  []DeviceInfo   `json:"devices,omitempty"`
 	Frame    int            `json:"frame,omitempty"`
 	SceneID  string         `json:"scene_id,omitempty"`
+	Weather  *WeatherInfo   `json:"weather,omitempty"`
 }
 
 type Event struct {

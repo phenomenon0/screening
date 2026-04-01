@@ -79,7 +79,16 @@ data class ServerMessage(
     val devices: List<DeviceInfo>? = null,
     val url: String? = null,
     val frame: Int? = null,
-    val target: String? = null
+    val target: String? = null,
+    val weather: WeatherInfo? = null
+)
+
+@Serializable
+data class WeatherInfo(
+    @SerialName("temp_f") val tempF: String = "",
+    @SerialName("temp_c") val tempC: String = "",
+    val condition: String = "",
+    val emoji: String = ""
 )
 
 @Serializable
@@ -109,5 +118,9 @@ data class DashboardState(
     val serverBaseUrl: String = "",
     val screenShareUrl: String? = null,
     val forceFrame: Int? = null,
-    val showQR: Boolean = false
+    val showQR: Boolean = false,
+    val alarmTitle: String? = null,
+    val alarmTime: String? = null,
+    val weatherEmoji: String = "",
+    val weatherTemp: String = ""
 )
