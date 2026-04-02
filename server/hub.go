@@ -101,12 +101,7 @@ func (h *Hub) SendFullState(ctx context.Context, conn *websocket.Conn) error {
 		{Type: "pomodoro_sync", Pomodoro: &pomoState},
 		{Type: "devices_sync", Devices: h.Devices()},
 	}
-	if h.weather != nil {
-		w := h.weather.Current()
-		if w.TempF != "" {
-			msgs = append(msgs, ServerMessage{Type: "weather_sync", Weather: &w})
-		}
-	}
+	// Weather sent via periodic broadcast, not in full state
 	if h.screen.IsActive() {
 		msgs = append(msgs, ServerMessage{Type: "screen_share_active", URL: h.screen.streamURL()})
 	}

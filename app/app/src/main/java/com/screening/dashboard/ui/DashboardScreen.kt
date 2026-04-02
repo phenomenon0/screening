@@ -27,6 +27,7 @@ import com.screening.dashboard.ui.components.NavRail
 import com.screening.dashboard.ui.components.PomodoroOverlay
 import com.screening.dashboard.ui.components.StatusBar
 import com.screening.dashboard.ui.frames.*
+import com.screening.dashboard.ui.frames.ChatFrame
 import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.Text
 import com.screening.dashboard.ui.theme.*
@@ -38,8 +39,9 @@ private const val FRAME_HABITS = 2
 private const val FRAME_CALENDAR = 3
 private const val FRAME_VIDEOS = 4
 private const val FRAME_MUSIC = 5
+private const val FRAME_AI = 6
 private const val AUTO_FRAME_COUNT = 4
-private const val TOTAL_FRAMES = 6
+private const val TOTAL_FRAMES = 7
 
 private fun frameDurationMs(frame: Int): Long = when (frame) {
     FRAME_IMAGES -> 8 * 60_000L
@@ -54,8 +56,11 @@ fun DashboardScreen(
     state: DashboardState,
     imageLoader: ImageLoader,
     onToggleTodo: (String) -> Unit,
+    onToggleHabit: (String) -> Unit = {},
+    onAddTodo: (String, Int) -> Unit = { _, _ -> },
     onScreenShareStop: () -> Unit = {},
-    onClearForceFrame: () -> Unit = {}
+    onClearForceFrame: () -> Unit = {},
+    onClearAlarm: () -> Unit = {}
 ) {
     val screenUrl = state.screenShareUrl
     if (screenUrl != null) {
@@ -82,7 +87,7 @@ fun DashboardScreen(
     val alarmPlayer = remember { android.media.MediaPlayer.create(context, com.screening.dashboard.R.raw.alarm_alert) }
 
     LaunchedEffect(state.alarmTitle) {
-        if (state.alarmTitle != null) {
+        if (state.alarmTitle != null && !showAlarm) {
             alarmTitle = state.alarmTitle!!
             alarmTime = state.alarmTime ?: ""
             showAlarm = true
@@ -90,17 +95,21 @@ fun DashboardScreen(
             delay(20_000)
             showAlarm = false
             try { alarmPlayer.pause(); alarmPlayer.seekTo(0) } catch (_: Exception) {}
+            onClearAlarm()
         }
     }
 
     DisposableEffect(Unit) { onDispose { try { alarmPlayer.release() } catch (_: Exception) {} } }
 
     var autoScrollKey by remember { mutableIntStateOf(0) }
+    var aiOkTrigger by remember { mutableIntStateOf(0) }
     LaunchedEffect(autoScrollKey, activeFrame) {
         if (activeFrame < AUTO_FRAME_COUNT) { delay(frameDurationMs(activeFrame)); activeFrame = (activeFrame + 1) % AUTO_FRAME_COUNT }
     }
 
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // Re-assert focus on the outer box every time frame changes.
+    // Without this, LazyColumn inside ChatFrame (and other frames) steals focus on TV.
+    LaunchedEffect(activeFrame) { focusRequester.requestFocus() }
 
     fun navigateFrame(delta: Int) {
         var next = (activeFrame + delta + TOTAL_FRAMES) % TOTAL_FRAMES
@@ -122,13 +131,27 @@ fun DashboardScreen(
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
                 if (activeFrame == FRAME_VIDEOS || activeFrame == FRAME_TODO || activeFrame == FRAME_MUSIC) return@onKeyEvent false
+                if (activeFrame == FRAME_AI) {
+                    return@onKeyEvent when (event.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_CENTER,
+                        KeyEvent.KEYCODE_ENTER,
+                        KeyEvent.KEYCODE_BUTTON_A,
+                        KeyEvent.KEYCODE_NUMPAD_ENTER -> { aiOkTrigger++; true }
+                        KeyEvent.KEYCODE_DPAD_LEFT  -> { navigateFrame(-1); true }
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> { navigateFrame(1); true }
+                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { activeFrame = FRAME_IMAGES; autoScrollKey++; true }
+                        else -> false
+                    }
+                }
                 when (event.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> { navigateFrame(-1); true }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> { navigateFrame(1); true }
                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { true }
-                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> { showQR = !showQR; true }
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        activeFrame = FRAME_AI; autoScrollKey++; true
+                    }
                     KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> when {
-                        showQR -> { showQR = false; true }
                         activeFrame >= AUTO_FRAME_COUNT -> { activeFrame = FRAME_IMAGES; autoScrollKey++; true }
                         else -> false
                     }
@@ -161,6 +184,14 @@ fun DashboardScreen(
                                 onNavigateLeft = { navigateFrame(-1) },
                                 onNavigateRight = { navigateFrame(1) },
                                 onBack = { activeFrame = FRAME_IMAGES; autoScrollKey++ }
+                            )
+                            FRAME_AI -> ChatFrame(
+                                state = state,
+                                okTrigger = aiOkTrigger,
+                                onToggleTodo = onToggleTodo,
+                                onAddTodo = onAddTodo,
+                                onToggleHabit = onToggleHabit,
+                                onSwitchFrame = { frame -> activeFrame = frame.coerceIn(0, TOTAL_FRAMES - 1); autoScrollKey++ }
                             )
                         }
                     }

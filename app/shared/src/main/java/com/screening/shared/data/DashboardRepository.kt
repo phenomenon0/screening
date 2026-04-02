@@ -70,6 +70,7 @@ class DashboardRepository(private val wsClient: WebSocketClient) {
     fun changeFrame(frame: Int, target: String? = null) = wsClient.send(ClientMessage(type = "frame_change", frame = frame, target = target))
     fun screenShareStop() = wsClient.send(ClientMessage(type = "screen_share_stop"))
     fun clearForceFrame() { _state.update { it.copy(forceFrame = null) } }
+    fun clearAlarm() { _state.update { it.copy(alarmTitle = null, alarmTime = null) } }
 
     fun sendRaw(json: String) {
         try { wsClient.sendRaw(json) } catch (_: Exception) {}

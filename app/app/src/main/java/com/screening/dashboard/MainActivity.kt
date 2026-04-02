@@ -44,8 +44,11 @@ class MainActivity : ComponentActivity() {
                     state = state.copy(serverBaseUrl = app.serverBaseUrl),
                     imageLoader = app.imageLoader,
                     onToggleTodo = { id -> app.repository.toggleTodo(id) },
+                    onToggleHabit = { id -> app.repository.toggleHabit(id) },
+                    onAddTodo = { text, priority -> app.repository.addTodo(text, priority) },
                     onScreenShareStop = { app.repository.screenShareStop() },
-                    onClearForceFrame = { app.repository.clearForceFrame() }
+                    onClearForceFrame = { app.repository.clearForceFrame() },
+                    onClearAlarm = { app.repository.clearAlarm() }
                 )
             }
         }
