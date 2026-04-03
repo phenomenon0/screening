@@ -48,7 +48,10 @@ class MainActivity : ComponentActivity() {
                     onAddTodo = { text, priority -> app.repository.addTodo(text, priority) },
                     onScreenShareStop = { app.repository.screenShareStop() },
                     onClearForceFrame = { app.repository.clearForceFrame() },
-                    onClearAlarm = { app.repository.clearAlarm() }
+                    onClearAlarm = { app.repository.clearAlarm() },
+                    onClearAiQuery = { app.repository.clearAiQuery() },
+                    onPresentPage = { page -> app.repository.presentPage(page) },
+                    onPresentClose = { app.repository.presentClose() }
                 )
             }
         }

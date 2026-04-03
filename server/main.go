@@ -85,8 +85,12 @@ func main() {
 	scenes.CreateDefault()
 
 	weather := NewWeatherSource(func() { hub.BroadcastWeather() })
+	notes := NewNoteStore(dataDir)
+
+	present := NewPresentationStore(dataDir, func() { hub.BroadcastPresentation() })
 
 	hub = NewHub(calendar, todos, images, videos, music, screen, pomodoro, habits, weather)
+	hub.present = present
 
 	// Wire alarm callback — broadcast to all clients
 	calendar.onAlarm = func(a AlarmInfo) {
@@ -122,6 +126,11 @@ func main() {
 	mux.HandleFunc("/assets/", handleFileServe(assetsDir))
 	mux.HandleFunc("/scenes/", handleSceneList(scenes))
 	mux.Handle("/scene/", http.StripPrefix("/scene/", handleSceneUI()))
+	mux.HandleFunc("/api/search", handleSearch)
+	mux.HandleFunc("/api/fetch", handleFetchURL)
+	mux.HandleFunc("/api/present", handlePresentUpload(present, hub))
+	mux.HandleFunc("/present/", handlePresentServe(present))
+	mux.HandleFunc("/mcp", handleMCP(hub, notes))
 	mux.Handle("/", handleWebUI())
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

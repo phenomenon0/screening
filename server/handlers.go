@@ -181,6 +181,26 @@ func handleWebSocket(hub *Hub, fs *FrameStream, ss *SceneStream) http.HandlerFun
 			case "scene_camera_update":
 				// Relay raw JSON to scene renderers — camera data passes through untouched
 				hub.SendRawToType("scene_renderer", data)
+			case "ai_query":
+				if msg.Text != "" {
+					hub.SendToType("tv", ServerMessage{Type: "ai_query", URL: msg.Text})
+					log.Printf("ws: ai_query from %s: %s", clientID, msg.Text)
+				}
+			case "music_control":
+				if msg.Text != "" {
+					hub.SendToType("tv", ServerMessage{Type: "music_control", URL: msg.Text})
+				}
+			case "present_page":
+				if hub.present != nil {
+					hub.present.SetPage(msg.Frame)
+					hub.BroadcastPresentation()
+				}
+			case "present_close":
+				if hub.present != nil {
+					hub.present.Close()
+					hub.BroadcastPresentation()
+					hub.Broadcast(ServerMessage{Type: "frame_change", Frame: 0}) // back to gallery
+				}
 			case "screen_share_start":
 				hub.HandleScreenShare(true)
 			case "screen_share_stop":

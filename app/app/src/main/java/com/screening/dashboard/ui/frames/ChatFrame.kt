@@ -22,7 +22,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.compose.ui.layout.ContentScale
 import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
 import com.screening.dashboard.data.AiAction
 import com.screening.dashboard.data.AiClient
 import com.screening.dashboard.data.VoiceSession
@@ -31,7 +35,7 @@ import com.screening.shared.model.DashboardState
 import kotlinx.coroutines.launch
 
 private enum class MicState { IDLE, RECORDING, TRANSCRIBING, THINKING }
-private data class ChatMessage(val role: String, val text: String)
+private data class ChatMessage(val role: String, val text: String, val imageUrl: String? = null)
 
 @Composable
 fun ChatFrame(
@@ -40,7 +44,9 @@ fun ChatFrame(
     onToggleTodo: (String) -> Unit,
     onAddTodo: (String, Int) -> Unit,
     onToggleHabit: (String) -> Unit,
-    onSwitchFrame: (Int) -> Unit
+    onSwitchFrame: (Int) -> Unit,
+    onClearAiQuery: () -> Unit = {},
+    onMusicControl: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -50,7 +56,7 @@ fun ChatFrame(
     var micState by remember { mutableStateOf(MicState.IDLE) }
 
     val voiceSession = remember { VoiceSession() }
-    val aiClient = remember { AiClient() }
+    val aiClient = remember { AiClient(state.serverBaseUrl) }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -62,8 +68,9 @@ fun ChatFrame(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasPermission = granted }
 
-    // Auto-scroll to latest message
+    // Auto-scroll + cap at 50 messages to prevent memory bloat on TV
     LaunchedEffect(messages.size) {
+        if (messages.size > 50) messages.removeRange(0, messages.size - 50)
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
@@ -72,9 +79,37 @@ fun ChatFrame(
         onDispose { voiceSession.stopRecording() }
     }
 
+    // Handle queries from the phone remote.
+    // Must use scope.launch — LaunchedEffect key changes when onClearAiQuery() runs,
+    // which would cancel the in-flight Claude API call.
+    LaunchedEffect(state.aiQuery) {
+        val query = state.aiQuery ?: return@LaunchedEffect
+        onClearAiQuery()
+        scope.launch {
+            messages.add(ChatMessage("user", query))
+            micState = MicState.THINKING
+            val response = aiClient.ask(query, state)
+            messages.add(ChatMessage("assistant", response.text, imageUrl = response.imageUrl))
+            response.actions.forEach { action ->
+                when (action) {
+                    is AiAction.SwitchFrame  -> onSwitchFrame(action.frame)
+                    is AiAction.ToggleTodo   -> onToggleTodo(action.id)
+                    is AiAction.AddTodo      -> onAddTodo(action.text, action.priority)
+                    is AiAction.ToggleHabit  -> onToggleHabit(action.id)
+                    is AiAction.MusicControl -> onMusicControl(action.action)
+                    is AiAction.ShowImage    -> { /* handled via imageUrl */ }
+                }
+            }
+            micState = MicState.IDLE
+        }
+    }
+
     // OK button trigger from DashboardScreen (avoids Crossfade focus issue)
+    // Track last processed trigger to avoid re-firing when re-entering the frame
+    var lastProcessedTrigger by remember { mutableIntStateOf(okTrigger) }
     LaunchedEffect(okTrigger) {
-        if (okTrigger == 0) return@LaunchedEffect
+        if (okTrigger == 0 || okTrigger == lastProcessedTrigger) return@LaunchedEffect
+        lastProcessedTrigger = okTrigger
         when (micState) {
             MicState.IDLE -> {
                 if (!hasPermission) {
@@ -91,13 +126,15 @@ fun ChatFrame(
                         messages.add(ChatMessage("user", transcript))
                         micState = MicState.THINKING
                         val response = aiClient.ask(transcript, state)
-                        messages.add(ChatMessage("assistant", response.text))
+                        messages.add(ChatMessage("assistant", response.text, imageUrl = response.imageUrl))
                         response.actions.forEach { action ->
                             when (action) {
-                                is AiAction.SwitchFrame -> onSwitchFrame(action.frame)
-                                is AiAction.ToggleTodo  -> onToggleTodo(action.id)
-                                is AiAction.AddTodo     -> onAddTodo(action.text, action.priority)
-                                is AiAction.ToggleHabit -> onToggleHabit(action.id)
+                                is AiAction.SwitchFrame  -> onSwitchFrame(action.frame)
+                                is AiAction.ToggleTodo   -> onToggleTodo(action.id)
+                                is AiAction.AddTodo      -> onAddTodo(action.text, action.priority)
+                                is AiAction.ToggleHabit  -> onToggleHabit(action.id)
+                                is AiAction.MusicControl -> onMusicControl(action.action)
+                                is AiAction.ShowImage    -> { /* handled via imageUrl */ }
                             }
                         }
                     }
@@ -136,7 +173,7 @@ fun ChatFrame(
                     )
                 )
                 Text(
-                    text = "OK to speak  •  ↑ or BACK to exit",
+                    text = "BACK to exit",
                     style = DashboardTypography.labelSmall.copy(color = OnSurfaceVariant)
                 )
             }
@@ -155,16 +192,25 @@ fun ChatFrame(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "🎙", style = DashboardTypography.displayLarge)
+                                Text(text = "🤖", style = DashboardTypography.displayLarge)
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = "Press OK on your remote to speak",
-                                    style = DashboardTypography.titleLarge.copy(color = OnSurfaceVariant),
+                                    text = "AI Assistant",
+                                    style = DashboardTypography.headlineLarge.copy(
+                                        fontFamily = ManropeFamily,
+                                        color = PrimaryContainer
+                                    ),
                                     textAlign = TextAlign.Center
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Ask about your calendar, todos, habits — or control the TV",
+                                    text = "Open the AI tab on your phone to ask questions,\nsearch the web, control music, or manage your dashboard",
+                                    style = DashboardTypography.bodyLarge.copy(color = OnSurfaceVariant),
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(
+                                    text = "🔍 Web Search   📝 Notes   🎵 Music   📺 TV Control",
                                     style = DashboardTypography.bodyMedium.copy(color = OnSurfaceVariant),
                                     textAlign = TextAlign.Center
                                 )
@@ -187,7 +233,7 @@ fun ChatFrame(
             ) {
                 when (micState) {
                     MicState.IDLE -> Text(
-                        text = "🎙  Press OK to speak",
+                        text = if (messages.isEmpty()) "Waiting for input from phone…" else "Ready",
                         style = DashboardTypography.titleMedium.copy(color = OnSurfaceVariant)
                     )
                     MicState.RECORDING -> Row(
@@ -203,7 +249,7 @@ fun ChatFrame(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Listening… press OK to stop",
+                            text = "Listening…",
                             style = DashboardTypography.titleMedium.copy(color = OnSurface)
                         )
                     }
@@ -212,7 +258,7 @@ fun ChatFrame(
                         style = DashboardTypography.titleMedium.copy(color = PrimaryContainer)
                     )
                     MicState.THINKING -> Text(
-                        text = "Thinking…",
+                        text = "Thinking… (Opus)",
                         style = DashboardTypography.titleMedium.copy(color = PrimaryContainer)
                     )
                 }
@@ -235,27 +281,40 @@ private fun MessageBubble(msg: ChatMessage) {
                 style = DashboardTypography.titleMedium
             )
         }
-        Box(
-            modifier = Modifier
-                .widthIn(max = 700.dp)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = if (isUser) 16.dp else 4.dp,
-                        topEnd = if (isUser) 4.dp else 16.dp,
-                        bottomStart = 16.dp,
-                        bottomEnd = 16.dp
+        Column(modifier = Modifier.widthIn(max = 700.dp)) {
+            Box(
+                modifier = Modifier
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = if (isUser) 16.dp else 4.dp,
+                            topEnd = if (isUser) 4.dp else 16.dp,
+                            bottomStart = if (msg.imageUrl != null) 4.dp else 16.dp,
+                            bottomEnd = if (msg.imageUrl != null) 4.dp else 16.dp
+                        )
+                    )
+                    .background(if (isUser) PrimaryContainer.copy(alpha = 0.25f) else SurfaceContainerHigh)
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = msg.text,
+                    style = DashboardTypography.bodyLarge.copy(
+                        color = if (isUser) PrimaryContainer else OnSurface,
+                        fontSize = 18.sp
                     )
                 )
-                .background(if (isUser) PrimaryContainer.copy(alpha = 0.25f) else SurfaceContainerHigh)
-                .padding(horizontal = 20.dp, vertical = 12.dp)
-        ) {
-            Text(
-                text = msg.text,
-                style = DashboardTypography.bodyLarge.copy(
-                    color = if (isUser) PrimaryContainer else OnSurface,
-                    fontSize = 18.sp
+            }
+            if (msg.imageUrl != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalPlatformContext.current).data(msg.imageUrl).build(),
+                    contentDescription = "Image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)),
+                    contentScale = ContentScale.Fit
                 )
-            )
+            }
         }
     }
 }

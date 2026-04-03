@@ -80,7 +80,23 @@ data class ServerMessage(
     val url: String? = null,
     val frame: Int? = null,
     val target: String? = null,
-    val weather: WeatherInfo? = null
+    val weather: WeatherInfo? = null,
+    val presentation: PresentationInfo? = null
+)
+
+@Serializable
+data class PresentPage(
+    val number: Int = 0,
+    val url: String = ""
+)
+
+@Serializable
+data class PresentationInfo(
+    val id: String = "",
+    val title: String = "",
+    @SerialName("page_count") val pageCount: Int = 0,
+    val current: Int = 0,
+    val pages: List<PresentPage> = emptyList()
 )
 
 @Serializable
@@ -122,5 +138,7 @@ data class DashboardState(
     val alarmTitle: String? = null,
     val alarmTime: String? = null,
     val weatherEmoji: String = "",
-    val weatherTemp: String = ""
+    val weatherTemp: String = "",
+    val aiQuery: String? = null,
+    val presentation: PresentationInfo? = null
 )

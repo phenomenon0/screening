@@ -10,6 +10,9 @@ app/local.properties
 *.jks
 *.keystore
 
+# API keys (kept local, never committed)
+**/AiConfig.kt
+
 # Go
 server/server
 server/dist/

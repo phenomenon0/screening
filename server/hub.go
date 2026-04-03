@@ -33,6 +33,7 @@ type Hub struct {
 	pomodoro *Pomodoro
 	habits   *HabitStore
 	weather  *WeatherSource
+	present  *PresentationStore
 }
 
 func NewHub(cal *CalendarSource, todos *TodoSource, imgs *ImageSource, vids *VideoSource, mus *MusicSource, scr *ScreenShare, pomo *Pomodoro, hab *HabitStore, wea *WeatherSource) *Hub {
@@ -101,7 +102,17 @@ func (h *Hub) SendFullState(ctx context.Context, conn *websocket.Conn) error {
 		{Type: "pomodoro_sync", Pomodoro: &pomoState},
 		{Type: "devices_sync", Devices: h.Devices()},
 	}
-	// Weather sent via periodic broadcast, not in full state
+	if h.weather != nil {
+		w := h.weather.Current()
+		if w.TempF != "" {
+			msgs = append(msgs, ServerMessage{Type: "weather_sync", Weather: &w})
+		}
+	}
+	if h.present != nil {
+		if p := h.present.Active(); p != nil {
+			msgs = append(msgs, ServerMessage{Type: "presentation_sync", Present: p})
+		}
+	}
 	if h.screen.IsActive() {
 		msgs = append(msgs, ServerMessage{Type: "screen_share_active", URL: h.screen.streamURL()})
 	}
@@ -196,6 +207,13 @@ func (h *Hub) BroadcastPomodoro() {
 	s := h.pomodoro.State()
 	h.Broadcast(ServerMessage{Type: "pomodoro_sync", Pomodoro: &s})
 }
+func (h *Hub) BroadcastPresentation() {
+	if h.present != nil {
+		p := h.present.Active()
+		h.Broadcast(ServerMessage{Type: "presentation_sync", Present: p})
+	}
+}
+
 func (h *Hub) BroadcastWeather() {
 	if h.weather != nil {
 		w := h.weather.Current()

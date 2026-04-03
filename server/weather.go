@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -16,15 +18,42 @@ type WeatherInfo struct {
 }
 
 type WeatherSource struct {
-	mu       sync.RWMutex
-	current  WeatherInfo
-	onChange func()
+	mu        sync.RWMutex
+	current   WeatherInfo
+	onChange  func()
+	cachePath string
 }
 
 func NewWeatherSource(onChange func()) *WeatherSource {
-	ws := &WeatherSource{onChange: onChange}
+	home, _ := os.UserHomeDir()
+	ws := &WeatherSource{
+		onChange:  onChange,
+		cachePath: filepath.Join(home, ".local", "share", "screening", "weather_cache.json"),
+	}
+	ws.loadCache()
 	ws.fetch()
 	return ws
+}
+
+func (ws *WeatherSource) loadCache() {
+	data, err := os.ReadFile(ws.cachePath)
+	if err != nil {
+		return
+	}
+	var info WeatherInfo
+	if json.Unmarshal(data, &info) == nil && info.TempF != "" {
+		ws.mu.Lock()
+		ws.current = info
+		ws.mu.Unlock()
+		log.Printf("weather: loaded cache: %s %s°F (%s)", info.Emoji, info.TempF, info.Condition)
+	}
+}
+
+func (ws *WeatherSource) saveCache() {
+	ws.mu.RLock()
+	data, _ := json.Marshal(ws.current)
+	ws.mu.RUnlock()
+	os.WriteFile(ws.cachePath, data, 0644)
 }
 
 func (ws *WeatherSource) Current() WeatherInfo {
@@ -76,6 +105,7 @@ func (ws *WeatherSource) fetch() {
 	}
 	ws.mu.Unlock()
 	log.Printf("weather: %s %s°F (%s)", ws.current.Emoji, ws.current.TempF, condition)
+	ws.saveCache()
 }
 
 func weatherEmoji(code string, condition string) string {
@@ -100,6 +130,10 @@ func weatherEmoji(code string, condition string) string {
 }
 
 func (ws *WeatherSource) StartPolling(done <-chan struct{}) {
+	// Broadcast cached/initial weather immediately
+	if ws.onChange != nil && ws.Current().TempF != "" {
+		ws.onChange()
+	}
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 	for {

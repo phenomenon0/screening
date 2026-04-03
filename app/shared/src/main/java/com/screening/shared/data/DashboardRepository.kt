@@ -40,6 +40,8 @@ class DashboardRepository(private val wsClient: WebSocketClient) {
                             if (w != null) current.copy(weatherEmoji = w.emoji, weatherTemp = "${w.tempF}\u00B0F")
                             else current
                         }
+                        "presentation_sync" -> current.copy(presentation = msg.presentation)
+                        "ai_query" -> current.copy(aiQuery = msg.url)
                         "ping" -> {
                             wsClient.send(ClientMessage(type = "pong"))
                             current
@@ -71,6 +73,10 @@ class DashboardRepository(private val wsClient: WebSocketClient) {
     fun screenShareStop() = wsClient.send(ClientMessage(type = "screen_share_stop"))
     fun clearForceFrame() { _state.update { it.copy(forceFrame = null) } }
     fun clearAlarm() { _state.update { it.copy(alarmTitle = null, alarmTime = null) } }
+    fun clearAiQuery() { _state.update { it.copy(aiQuery = null) } }
+    fun sendAiQuery(text: String) = wsClient.send(ClientMessage(type = "ai_query", text = text))
+    fun presentPage(page: Int) = wsClient.send(ClientMessage(type = "present_page", frame = page))
+    fun presentClose() = wsClient.send(ClientMessage(type = "present_close"))
 
     fun sendRaw(json: String) {
         try { wsClient.sendRaw(json) } catch (_: Exception) {}
